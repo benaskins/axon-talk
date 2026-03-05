@@ -1,4 +1,4 @@
-// Package ollama provides a loop.ChatClient implementation for Ollama.
+// Package ollama provides a loop.LLMClient implementation for Ollama.
 package ollama
 
 import (
@@ -9,7 +9,7 @@ import (
 	ollamaapi "github.com/ollama/ollama/api"
 )
 
-// Client implements loop.ChatClient by translating to/from the Ollama API.
+// Client implements loop.LLMClient by translating to/from the Ollama API.
 type Client struct {
 	api *ollamaapi.Client
 }
@@ -29,7 +29,7 @@ func NewClientFromEnvironment() (*Client, error) {
 }
 
 // Chat sends a request to Ollama and streams responses back through fn.
-func (c *Client) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
+func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
 	ollamaReq := &ollamaapi.ChatRequest{
 		Model:    req.Model,
 		Messages: toMessages(req.Messages),
@@ -118,8 +118,8 @@ func toTools(defs []tool.ToolDef) ollamaapi.Tools {
 	return out
 }
 
-func fromResponse(resp ollamaapi.ChatResponse) loop.ChatResponse {
-	r := loop.ChatResponse{
+func fromResponse(resp ollamaapi.ChatResponse) loop.Response {
+	r := loop.Response{
 		Content:  resp.Message.Content,
 		Thinking: resp.Message.Thinking,
 		Done:     resp.Done,

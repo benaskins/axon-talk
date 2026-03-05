@@ -3,7 +3,7 @@ module github.com/benaskins/axon-talk
 go 1.25.0
 
 require (
-	github.com/benaskins/axon-loop v0.1.1
+	github.com/benaskins/axon-loop v0.3.0
 	github.com/benaskins/axon-tool v0.1.0
 	github.com/ollama/ollama v0.17.6
 )

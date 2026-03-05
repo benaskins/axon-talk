@@ -8,7 +8,7 @@ import (
 	ollamaapi "github.com/ollama/ollama/api"
 )
 
-func TestClientImplementsChatClient(t *testing.T) {
+func TestClientImplementsLLMClient(t *testing.T) {
 	api, _ := ollamaapi.ClientFromEnvironment()
-	var _ loop.ChatClient = ollama.NewClient(api)
+	var _ loop.LLMClient = ollama.NewClient(api)
 }

@@ -1,6 +1,6 @@
 # axon-talk
 
-LLM provider adapters for [axon-loop](https://github.com/benaskins/axon-loop). Each subpackage implements `loop.ChatClient` for a specific backend.
+LLM provider adapters for [axon-loop](https://github.com/benaskins/axon-loop). Each subpackage implements `loop.LLMClient` for a specific backend.
 
 ## Providers
 
@@ -17,7 +17,7 @@ import (
 )
 
 client, err := ollama.NewClientFromEnvironment()
-// client implements loop.ChatClient
+// client implements loop.LLMClient
 
 result, err := loop.Run(ctx, client, &loop.ChatRequest{
     Model:    "llama3.2",

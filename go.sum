@@ -4,8 +4,8 @@ github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de h1:FxWPpzIjnTlhP
 github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de/go.mod h1:DCaWoUhZrYW9p1lxo/cm8EmUOOzAPSEZNGF2DK1dJgw=
 github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
-github.com/benaskins/axon-loop v0.1.1 h1:JJZdtcvMzAJfJFjJQPrJ0mCAtP70XXemcprUvz3FPpI=
-github.com/benaskins/axon-loop v0.1.1/go.mod h1:/DokwWh1+mEyplyhLUPov1PGl45M/X7ra4r8YsI8rkA=
+github.com/benaskins/axon-loop v0.3.0 h1:gkLby5gdX4v4RlYCPJQrNz55vukFaifpNBLJRUQaXG4=
+github.com/benaskins/axon-loop v0.3.0/go.mod h1:/DokwWh1+mEyplyhLUPov1PGl45M/X7ra4r8YsI8rkA=
 github.com/benaskins/axon-tool v0.1.0 h1:iuraVLDnGoBm8q13mA+XPw6Axx5HjBw9Qh6J2gk+uRs=
 github.com/benaskins/axon-tool v0.1.0/go.mod h1:ExEoZ8sgPlg4Fj9yGLESkAs7Q8jvI0ntsgox4PfBsLU=
 github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
