@@ -1,6 +1,8 @@
 # axon-talk
 
-LLM provider adapters for [axon-loop](https://github.com/benaskins/axon-loop). Each subpackage implements `loop.LLMClient` for a specific backend.
+LLM provider adapters for [axon-loop](https://github.com/benaskins/axon-loop). Part of [lamina](https://github.com/benaskins/lamina) — each axon package can be used independently.
+
+Each subpackage implements `loop.LLMClient` for a specific backend.
 
 ## Providers
 
