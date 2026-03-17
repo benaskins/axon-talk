@@ -327,6 +327,50 @@ func TestChat_ModelInURL(t *testing.T) {
 	}
 }
 
+func TestChat_ToolCallIDs(t *testing.T) {
+	var gotBody chatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(apiResponse{
+			Success: true,
+			Result:  chatCompletion{Choices: []choice{{Message: responseMessage{Content: "ok"}}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model: "model",
+		Messages: []loop.Message{
+			{Role: "user", Content: "search for go"},
+			{Role: "assistant", ToolCalls: []loop.ToolCall{
+				{Name: "search", Arguments: map[string]any{"q": "go"}},
+			}},
+			{Role: "tool", Content: "results: golang.org"},
+		},
+	}
+
+	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+
+	// Assistant message should have tool call with ID
+	assistantMsg := gotBody.Messages[1]
+	if len(assistantMsg.ToolCalls) != 1 {
+		t.Fatalf("got %d tool calls, want 1", len(assistantMsg.ToolCalls))
+	}
+	if assistantMsg.ToolCalls[0].ID == "" {
+		t.Error("tool call ID should not be empty")
+	}
+
+	// Tool message should have matching tool_call_id
+	toolMsg := gotBody.Messages[2]
+	if toolMsg.ToolCallID == "" {
+		t.Error("tool_call_id should not be empty")
+	}
+	if toolMsg.ToolCallID != assistantMsg.ToolCalls[0].ID {
+		t.Errorf("tool_call_id %q doesn't match call ID %q", toolMsg.ToolCallID, assistantMsg.ToolCalls[0].ID)
+	}
+}
+
 func TestChat_MessagesWithToolCalls(t *testing.T) {
 	var gotBody chatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

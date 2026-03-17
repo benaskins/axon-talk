@@ -117,20 +117,36 @@ func buildRequest(req *loop.Request) chatRequest {
 }
 
 func toMessages(msgs []loop.Message, think *bool) []message {
-	out := make([]message, len(msgs))
+	out := make([]message, 0, len(msgs))
+	// Track pending tool call IDs so we can match tool results.
+	var pendingCallIDs []string
+
 	for i, m := range msgs {
 		content := m.Content
-		// Prepend /no_think to the last user message when thinking is disabled.
 		if think != nil && !*think && m.Role == "user" && i == len(msgs)-1 {
 			content = "/no_think " + content
 		}
-		out[i] = message{
+
+		msg := message{
 			Role:    m.Role,
 			Content: content,
 		}
+
 		if len(m.ToolCalls) > 0 {
-			out[i].ToolCalls = toRequestToolCalls(m.ToolCalls)
+			msg.ToolCalls = toRequestToolCalls(m.ToolCalls)
+			pendingCallIDs = nil
+			for _, tc := range msg.ToolCalls {
+				pendingCallIDs = append(pendingCallIDs, tc.ID)
+			}
 		}
+
+		// Match tool result messages with their call IDs.
+		if m.Role == "tool" && len(pendingCallIDs) > 0 {
+			msg.ToolCallID = pendingCallIDs[0]
+			pendingCallIDs = pendingCallIDs[1:]
+		}
+
+		out = append(out, msg)
 	}
 	return out
 }
@@ -140,6 +156,7 @@ func toRequestToolCalls(calls []loop.ToolCall) []requestToolCall {
 	for i, tc := range calls {
 		args, _ := json.Marshal(tc.Arguments)
 		out[i] = requestToolCall{
+			ID:   fmt.Sprintf("call_%d", i),
 			Type: "function",
 			Function: requestToolCallFunction{
 				Name:      tc.Name,
@@ -233,12 +250,14 @@ type chatRequest struct {
 }
 
 type message struct {
-	Role      string            `json:"role"`
-	Content   string            `json:"content"`
-	ToolCalls []requestToolCall `json:"tool_calls,omitempty"`
+	Role       string            `json:"role"`
+	Content    string            `json:"content"`
+	ToolCalls  []requestToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string            `json:"tool_call_id,omitempty"`
 }
 
 type requestToolCall struct {
+	ID       string                  `json:"id"`
 	Type     string                  `json:"type"`
 	Function requestToolCallFunction `json:"function"`
 }
