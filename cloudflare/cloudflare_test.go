@@ -204,6 +204,60 @@ func TestChat_WithToolCalls(t *testing.T) {
 	}
 }
 
+func TestChat_NormalizesToolCallArgs(t *testing.T) {
+	// Model returns temperature as string "22" — should be normalized to float64.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(apiResponse{
+			Success: true,
+			Result: chatCompletion{
+				Choices: []choice{{
+					Message: responseMessage{
+						ToolCalls: []responseToolCall{{
+							Function: responseToolCallFunction{
+								Name:      "set_temp",
+								Arguments: `{"degrees":"22","enabled":"true"}`,
+							},
+						}},
+					},
+				}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model:    "model",
+		Messages: []loop.Message{{Role: "user", Content: "Set temp to 22"}},
+		Tools: []tool.ToolDef{{
+			Name: "set_temp",
+			Parameters: tool.ParameterSchema{
+				Type: "object",
+				Properties: map[string]tool.PropertySchema{
+					"degrees": {Type: "number"},
+					"enabled": {Type: "boolean"},
+				},
+			},
+		}},
+	}
+
+	var got loop.Response
+	client.Chat(context.Background(), req, func(resp loop.Response) error {
+		got = resp
+		return nil
+	})
+
+	if len(got.ToolCalls) != 1 {
+		t.Fatalf("got %d tool calls, want 1", len(got.ToolCalls))
+	}
+	if v, ok := got.ToolCalls[0].Arguments["degrees"].(float64); !ok || v != 22 {
+		t.Errorf("degrees = %v (%T), want 22 (float64)", got.ToolCalls[0].Arguments["degrees"], got.ToolCalls[0].Arguments["degrees"])
+	}
+	if v, ok := got.ToolCalls[0].Arguments["enabled"].(bool); !ok || !v {
+		t.Errorf("enabled = %v (%T), want true (bool)", got.ToolCalls[0].Arguments["enabled"], got.ToolCalls[0].Arguments["enabled"])
+	}
+}
+
 func TestChat_ToolsSentInRequest(t *testing.T) {
 	var gotBody chatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

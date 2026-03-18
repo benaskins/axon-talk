@@ -95,7 +95,9 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 		return fmt.Errorf("cloudflare: api error: %s", respBody)
 	}
 
-	return fn(fromResponse(apiResp.Result))
+	resp := fromResponse(apiResp.Result)
+	normalizeToolCallArgs(&resp, req.Tools)
+	return fn(resp)
 }
 
 func buildRequest(req *loop.Request) chatRequest {
@@ -278,6 +280,29 @@ func tryMatchContentToolCalls(resp loop.Response) loop.Response {
 		}
 	}
 	return resp
+}
+
+// normalizeToolCallArgs coerces tool call argument types to match the
+// JSON Schema types declared in each tool's parameter schema.
+func normalizeToolCallArgs(resp *loop.Response, tools []tool.ToolDef) {
+	if len(resp.ToolCalls) == 0 || len(tools) == 0 {
+		return
+	}
+
+	toolTypes := make(map[string]map[string]string, len(tools))
+	for _, td := range tools {
+		types := make(map[string]string, len(td.Parameters.Properties))
+		for name, prop := range td.Parameters.Properties {
+			types[name] = prop.Type
+		}
+		toolTypes[td.Name] = types
+	}
+
+	for i, tc := range resp.ToolCalls {
+		if types, ok := toolTypes[tc.Name]; ok {
+			resp.ToolCalls[i].Arguments = stream.NormalizeArguments(tc.Arguments, types)
+		}
+	}
 }
 
 // Wire types for the OpenAI-compatible Workers AI API.
