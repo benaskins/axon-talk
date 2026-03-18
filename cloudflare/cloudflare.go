@@ -111,6 +111,12 @@ func buildRequest(req *loop.Request) chatRequest {
 		}
 	}
 
+	if v, ok := req.Options["temperature"]; ok {
+		if t, ok := v.(float64); ok {
+			cr.Temperature = &t
+		}
+	}
+
 	if len(req.Tools) > 0 {
 		cr.Tools = toTools(req.Tools)
 		t := true
@@ -310,6 +316,7 @@ func normalizeToolCallArgs(resp *loop.Response, tools []tool.ToolDef) {
 type chatRequest struct {
 	Messages          []message `json:"messages"`
 	MaxTokens         int       `json:"max_tokens,omitempty"`
+	Temperature       *float64  `json:"temperature,omitempty"`
 	Tools             []toolDef `json:"tools,omitempty"`
 	ParallelToolCalls *bool     `json:"parallel_tool_calls,omitempty"`
 }
