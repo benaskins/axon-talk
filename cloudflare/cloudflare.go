@@ -121,10 +121,33 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 	}
 	pending := make(map[int]*pendingToolCall)
 
+	// StreamFilter detects tool calls that models dump as JSON in content
+	// text instead of using the structured tool_calls field. Content tokens
+	// flow through immediately unless ToolCallMatcher signals PartialMatch
+	// (JSON might be forming), in which case they're held in the buffer.
+	var filterErr error
+	filter := stream.NewStreamFilter(
+		func(token string) {
+			if filterErr != nil {
+				return
+			}
+			filterErr = fn(loop.Response{Content: token})
+		},
+		[]stream.Matcher{stream.NewToolCallMatcher()},
+		stream.DefaultMaxBuffer,
+	)
+
 	err := parseSSE(httpResp.Body, func(ev sseEvent) error {
 		if ev.Done {
-			// Assemble accumulated tool calls.
-			var toolCalls []loop.ToolCall
+			// Flush the filter — emits remaining buffered content or
+			// extracts a tool call if the buffer matches.
+			action := filter.Flush()
+			if filterErr != nil {
+				return filterErr
+			}
+			toolCalls := collectFilterToolCalls(action)
+
+			// Assemble accumulated structured tool calls.
 			for i := 0; i < len(pending); i++ {
 				tc := pending[i]
 				var args map[string]any
@@ -155,14 +178,22 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 			p.args.WriteString(tc.Function.Arguments)
 		}
 
-		// Emit content tokens.
+		// Feed content tokens through the StreamFilter.
 		if ev.Delta.Content != "" {
-			if err := fn(loop.Response{Content: ev.Delta.Content}); err != nil {
-				return err
+			action := filter.Write(ev.Delta.Content)
+			if filterErr != nil {
+				return filterErr
+			}
+			// If the filter detected a complete tool call in content,
+			// emit it immediately.
+			if toolCalls := collectFilterToolCalls(action); len(toolCalls) > 0 {
+				if err := fn(loop.Response{ToolCalls: toolCalls}); err != nil {
+					return err
+				}
 			}
 		}
 
-		// Emit thinking tokens.
+		// Emit thinking tokens directly (no filtering needed).
 		if ev.Delta.ReasoningContent != "" {
 			if err := fn(loop.Response{Thinking: ev.Delta.ReasoningContent}); err != nil {
 				return err
@@ -172,7 +203,26 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 		return nil
 	})
 
-	return err
+	if err != nil {
+		return err
+	}
+	return filterErr
+}
+
+// collectFilterToolCalls converts a StreamFilter action into tool calls.
+func collectFilterToolCalls(action stream.FilterAction) []loop.ToolCall {
+	tca, ok := action.(stream.ToolCallAction)
+	if !ok || len(tca.Calls) == 0 {
+		return nil
+	}
+	calls := make([]loop.ToolCall, len(tca.Calls))
+	for i, tc := range tca.Calls {
+		calls[i] = loop.ToolCall{
+			Name:      tc.Name,
+			Arguments: tc.Arguments,
+		}
+	}
+	return calls
 }
 
 func buildRequest(req *loop.Request) chatRequest {

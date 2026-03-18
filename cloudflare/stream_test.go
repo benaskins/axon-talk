@@ -245,6 +245,117 @@ func TestChat_StreamNormalizesToolCallArgs(t *testing.T) {
 	}
 }
 
+func TestChat_StreamToolCallInContent(t *testing.T) {
+	// Model dumps tool call as JSON in content deltas instead of using
+	// structured tool_calls. StreamFilter + ToolCallMatcher should detect
+	// and extract it.
+	server := sseServer(
+		`{"choices":[{"delta":{"content":"{\"name\": \"get_weather\","}}]}`,
+		`{"choices":[{"delta":{"content":" \"arguments\": {\"city\": \"Sydney\"}}"}}]}`,
+		"[DONE]",
+	)
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model:    "model",
+		Messages: []loop.Message{{Role: "user", Content: "weather?"}},
+		Stream:   true,
+	}
+
+	var toolCalls []loop.ToolCall
+	var contentTokens []string
+	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+		if resp.Content != "" {
+			contentTokens = append(contentTokens, resp.Content)
+		}
+		toolCalls = append(toolCalls, resp.ToolCalls...)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+	if len(toolCalls) != 1 {
+		t.Fatalf("got %d tool calls, want 1", len(toolCalls))
+	}
+	if toolCalls[0].Name != "get_weather" {
+		t.Errorf("name = %q, want get_weather", toolCalls[0].Name)
+	}
+	if toolCalls[0].Arguments["city"] != "Sydney" {
+		t.Errorf("city = %v, want Sydney", toolCalls[0].Arguments["city"])
+	}
+	// Content should NOT have been emitted since it was a tool call
+	if len(contentTokens) > 0 {
+		t.Errorf("content tokens should be empty when tool call extracted, got %v", contentTokens)
+	}
+}
+
+func TestChat_StreamToolCallInCodeFence(t *testing.T) {
+	// Model wraps tool call JSON in a markdown code fence.
+	server := sseServer(
+		`{"choices":[{"delta":{"content":"` + "```json\\n" + `"}}]}`,
+		`{"choices":[{"delta":{"content":"{\"name\": \"search\", \"arguments\": {\"query\": \"test\"}}"}}]}`,
+		`{"choices":[{"delta":{"content":"\\n` + "```" + `"}}]}`,
+		"[DONE]",
+	)
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model:    "model",
+		Messages: []loop.Message{{Role: "user", Content: "search"}},
+		Stream:   true,
+	}
+
+	var toolCalls []loop.ToolCall
+	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+		toolCalls = append(toolCalls, resp.ToolCalls...)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+	if len(toolCalls) != 1 {
+		t.Fatalf("got %d tool calls, want 1", len(toolCalls))
+	}
+	if toolCalls[0].Name != "search" {
+		t.Errorf("name = %q, want search", toolCalls[0].Name)
+	}
+}
+
+func TestChat_StreamNormalContentNotHeld(t *testing.T) {
+	// Normal text content should flow through without being held by the filter.
+	server := sseServer(
+		`{"choices":[{"delta":{"content":"Hello "}}]}`,
+		`{"choices":[{"delta":{"content":"world, "}}]}`,
+		`{"choices":[{"delta":{"content":"how are you?"}}]}`,
+		"[DONE]",
+	)
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model:    "model",
+		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Stream:   true,
+	}
+
+	var tokens []string
+	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+		if resp.Content != "" {
+			tokens = append(tokens, resp.Content)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+	// All tokens should have been emitted
+	if got := strings.Join(tokens, ""); got != "Hello world, how are you?" {
+		t.Errorf("content = %q, want %q", got, "Hello world, how are you?")
+	}
+}
+
 func TestChat_NonStreamingStillWorks(t *testing.T) {
 	// Verify the non-streaming path is unchanged
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
