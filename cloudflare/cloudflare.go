@@ -180,13 +180,6 @@ func toRequestToolCalls(calls []loop.ToolCall) []requestToolCall {
 func toTools(defs []tool.ToolDef) []toolDef {
 	out := make([]toolDef, len(defs))
 	for i, d := range defs {
-		props := make(map[string]propertyDef, len(d.Parameters.Properties))
-		for name, prop := range d.Parameters.Properties {
-			props[name] = propertyDef{
-				Type:        prop.Type,
-				Description: prop.Description,
-			}
-		}
 		out[i] = toolDef{
 			Type: "function",
 			Function: functionDef{
@@ -195,12 +188,39 @@ func toTools(defs []tool.ToolDef) []toolDef {
 				Parameters: parametersDef{
 					Type:       d.Parameters.Type,
 					Required:   d.Parameters.Required,
-					Properties: props,
+					Properties: toPropertyDefs(d.Parameters.Properties),
 				},
 			},
 		}
 	}
 	return out
+}
+
+func toPropertyDefs(props map[string]tool.PropertySchema) map[string]propertyDef {
+	if len(props) == 0 {
+		return nil
+	}
+	out := make(map[string]propertyDef, len(props))
+	for name, prop := range props {
+		out[name] = toPropertyDef(prop)
+	}
+	return out
+}
+
+func toPropertyDef(prop tool.PropertySchema) propertyDef {
+	pd := propertyDef{
+		Type:        prop.Type,
+		Description: prop.Description,
+		Enum:        prop.Enum,
+		Default:     prop.Default,
+		Required:    prop.Required,
+		Properties:  toPropertyDefs(prop.Properties),
+	}
+	if prop.Items != nil {
+		items := toPropertyDef(*prop.Items)
+		pd.Items = &items
+	}
+	return pd
 }
 
 func fromResponse(result chatCompletion) loop.Response {
@@ -357,8 +377,13 @@ type parametersDef struct {
 }
 
 type propertyDef struct {
-	Type        string `json:"type"`
-	Description string `json:"description,omitempty"`
+	Type        string                  `json:"type"`
+	Description string                  `json:"description,omitempty"`
+	Enum        []any                   `json:"enum,omitempty"`
+	Default     any                     `json:"default,omitempty"`
+	Items       *propertyDef            `json:"items,omitempty"`
+	Properties  map[string]propertyDef  `json:"properties,omitempty"`
+	Required    []string                `json:"required,omitempty"`
 }
 
 type apiResponse struct {

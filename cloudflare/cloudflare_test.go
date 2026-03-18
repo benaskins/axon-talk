@@ -258,6 +258,83 @@ func TestChat_NormalizesToolCallArgs(t *testing.T) {
 	}
 }
 
+func TestChat_RichSchemaInRequest(t *testing.T) {
+	var gotBody chatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(apiResponse{
+			Success: true,
+			Result:  chatCompletion{Choices: []choice{{Message: responseMessage{Content: "ok"}}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model:    "model",
+		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Tools: []tool.ToolDef{{
+			Name: "create_event",
+			Parameters: tool.ParameterSchema{
+				Type:     "object",
+				Required: []string{"title", "priority"},
+				Properties: map[string]tool.PropertySchema{
+					"title": {Type: "string", Description: "Event title"},
+					"priority": {
+						Type:    "string",
+						Enum:    []any{"low", "medium", "high"},
+						Default: "medium",
+					},
+					"tags": {
+						Type: "array",
+						Items: &tool.PropertySchema{
+							Type: "string",
+						},
+					},
+					"location": {
+						Type: "object",
+						Properties: map[string]tool.PropertySchema{
+							"lat": {Type: "number"},
+							"lng": {Type: "number"},
+						},
+						Required: []string{"lat", "lng"},
+					},
+				},
+			},
+		}},
+	}
+
+	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+
+	if len(gotBody.Tools) != 1 {
+		t.Fatalf("got %d tools, want 1", len(gotBody.Tools))
+	}
+	props := gotBody.Tools[0].Function.Parameters.Properties
+
+	// Enum
+	if len(props["priority"].Enum) != 3 {
+		t.Errorf("priority enum = %v, want 3 values", props["priority"].Enum)
+	}
+
+	// Default
+	if props["priority"].Default != "medium" {
+		t.Errorf("priority default = %v, want medium", props["priority"].Default)
+	}
+
+	// Items
+	if props["tags"].Items == nil || props["tags"].Items.Type != "string" {
+		t.Errorf("tags items = %v, want {type: string}", props["tags"].Items)
+	}
+
+	// Nested properties
+	if props["location"].Properties["lat"].Type != "number" {
+		t.Errorf("location.lat type = %q, want number", props["location"].Properties["lat"].Type)
+	}
+	if len(props["location"].Required) != 2 {
+		t.Errorf("location required = %v, want [lat lng]", props["location"].Required)
+	}
+}
+
 func TestChat_ToolsSentInRequest(t *testing.T) {
 	var gotBody chatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
