@@ -205,11 +205,9 @@ func TestChat_WithToolCalls(t *testing.T) {
 }
 
 func TestChat_ToolsSentInRequest(t *testing.T) {
-	var gotTools []toolDef
+	var gotBody chatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body chatRequest
-		json.NewDecoder(r.Body).Decode(&body)
-		gotTools = body.Tools
+		json.NewDecoder(r.Body).Decode(&gotBody)
 
 		json.NewEncoder(w).Encode(apiResponse{
 			Success: true,
@@ -238,20 +236,23 @@ func TestChat_ToolsSentInRequest(t *testing.T) {
 
 	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
 
-	if len(gotTools) != 1 {
-		t.Fatalf("got %d tools, want 1", len(gotTools))
+	if len(gotBody.Tools) != 1 {
+		t.Fatalf("got %d tools, want 1", len(gotBody.Tools))
 	}
-	if gotTools[0].Type != "function" {
-		t.Errorf("type = %q, want function", gotTools[0].Type)
+	if gotBody.Tools[0].Type != "function" {
+		t.Errorf("type = %q, want function", gotBody.Tools[0].Type)
 	}
-	if gotTools[0].Function.Name != "search" {
-		t.Errorf("name = %q, want search", gotTools[0].Function.Name)
+	if gotBody.Tools[0].Function.Name != "search" {
+		t.Errorf("name = %q, want search", gotBody.Tools[0].Function.Name)
 	}
-	if len(gotTools[0].Function.Parameters.Required) != 1 {
-		t.Errorf("required = %v", gotTools[0].Function.Parameters.Required)
+	if len(gotBody.Tools[0].Function.Parameters.Required) != 1 {
+		t.Errorf("required = %v", gotBody.Tools[0].Function.Parameters.Required)
 	}
-	if gotTools[0].Function.Parameters.Properties["query"].Type != "string" {
-		t.Errorf("query type = %q", gotTools[0].Function.Parameters.Properties["query"].Type)
+	if gotBody.Tools[0].Function.Parameters.Properties["query"].Type != "string" {
+		t.Errorf("query type = %q", gotBody.Tools[0].Function.Parameters.Properties["query"].Type)
+	}
+	if gotBody.ParallelToolCalls == nil || !*gotBody.ParallelToolCalls {
+		t.Error("parallel_tool_calls should be true when tools are present")
 	}
 }
 

@@ -111,6 +111,8 @@ func buildRequest(req *loop.Request) chatRequest {
 
 	if len(req.Tools) > 0 {
 		cr.Tools = toTools(req.Tools)
+		t := true
+		cr.ParallelToolCalls = &t
 	}
 
 	return cr
@@ -281,9 +283,10 @@ func tryMatchContentToolCalls(resp loop.Response) loop.Response {
 // Wire types for the OpenAI-compatible Workers AI API.
 
 type chatRequest struct {
-	Messages  []message  `json:"messages"`
-	MaxTokens int        `json:"max_tokens,omitempty"`
-	Tools     []toolDef  `json:"tools,omitempty"`
+	Messages          []message `json:"messages"`
+	MaxTokens         int       `json:"max_tokens,omitempty"`
+	Tools             []toolDef `json:"tools,omitempty"`
+	ParallelToolCalls *bool     `json:"parallel_tool_calls,omitempty"`
 }
 
 type message struct {
