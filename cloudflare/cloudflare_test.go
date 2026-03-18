@@ -494,6 +494,111 @@ func TestChat_ToolCallInContent_Fallback(t *testing.T) {
 	}
 }
 
+func TestChat_NativeFormat_ToolCalls(t *testing.T) {
+	// Native Workers AI format: tool_calls at result level, not nested in choices.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{
+			"success": true,
+			"result": {
+				"response": "",
+				"tool_calls": [
+					{"name": "get_weather", "arguments": {"city": "Sydney"}}
+				]
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model:    "model",
+		Messages: []loop.Message{{Role: "user", Content: "Weather in Sydney?"}},
+	}
+
+	var got loop.Response
+	client.Chat(context.Background(), req, func(resp loop.Response) error {
+		got = resp
+		return nil
+	})
+
+	if len(got.ToolCalls) != 1 {
+		t.Fatalf("got %d tool calls, want 1", len(got.ToolCalls))
+	}
+	if got.ToolCalls[0].Name != "get_weather" {
+		t.Errorf("name = %q, want get_weather", got.ToolCalls[0].Name)
+	}
+	if got.ToolCalls[0].Arguments["city"] != "Sydney" {
+		t.Errorf("city = %v, want Sydney", got.ToolCalls[0].Arguments["city"])
+	}
+}
+
+func TestChat_NativeFormat_MultipleToolCalls(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{
+			"success": true,
+			"result": {
+				"response": "",
+				"tool_calls": [
+					{"name": "get_weather", "arguments": {"city": "Sydney"}},
+					{"name": "get_weather", "arguments": {"city": "Melbourne"}}
+				]
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model:    "model",
+		Messages: []loop.Message{{Role: "user", Content: "Weather in Sydney and Melbourne?"}},
+	}
+
+	var got loop.Response
+	client.Chat(context.Background(), req, func(resp loop.Response) error {
+		got = resp
+		return nil
+	})
+
+	if len(got.ToolCalls) != 2 {
+		t.Fatalf("got %d tool calls, want 2", len(got.ToolCalls))
+	}
+	if got.ToolCalls[1].Arguments["city"] != "Melbourne" {
+		t.Errorf("second call city = %v, want Melbourne", got.ToolCalls[1].Arguments["city"])
+	}
+}
+
+func TestChat_NativeFormat_ContentOnly(t *testing.T) {
+	// Native format with response text but no tool calls.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{
+			"success": true,
+			"result": {
+				"response": "Hello there!"
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model:    "model",
+		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+	}
+
+	var got loop.Response
+	client.Chat(context.Background(), req, func(resp loop.Response) error {
+		got = resp
+		return nil
+	})
+
+	if got.Content != "Hello there!" {
+		t.Errorf("content = %q, want %q", got.Content, "Hello there!")
+	}
+	if len(got.ToolCalls) != 0 {
+		t.Errorf("got %d tool calls, want 0", len(got.ToolCalls))
+	}
+}
+
 func TestChat_ToolCallInCodeFence_Fallback(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(apiResponse{

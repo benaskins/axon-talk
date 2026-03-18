@@ -194,11 +194,20 @@ func toTools(defs []tool.ToolDef) []toolDef {
 }
 
 func fromResponse(result chatCompletion) loop.Response {
-	if len(result.Choices) == 0 {
-		return loop.Response{Done: true}
+	// OpenAI-compatible format: choices[].message with nested tool_calls.
+	if len(result.Choices) > 0 {
+		return fromOpenAIResponse(result.Choices[0])
 	}
 
-	choice := result.Choices[0]
+	// Native Workers AI format: top-level response + tool_calls.
+	if result.Response != "" || len(result.ToolCalls) > 0 {
+		return fromNativeResponse(result)
+	}
+
+	return loop.Response{Done: true}
+}
+
+func fromOpenAIResponse(choice choice) loop.Response {
 	resp := loop.Response{
 		Content:  strings.TrimLeft(choice.Message.Content, "\n"),
 		Thinking: strings.TrimSpace(choice.Message.ReasoningContent),
@@ -221,23 +230,51 @@ func fromResponse(result chatCompletion) loop.Response {
 	// a tool call as JSON in the content text. The ToolCallMatcher from
 	// axon/stream handles fenced code blocks, bare JSON objects/arrays.
 	if len(resp.ToolCalls) == 0 && resp.Content != "" {
-		matcher := stream.NewToolCallMatcher()
-		if matcher.Scan([]byte(resp.Content), "") == stream.FullMatch {
-			if action := matcher.Extract([]byte(resp.Content)); action != (stream.ContinueAction{}) {
-				if tca, ok := action.(stream.ToolCallAction); ok {
-					resp.ToolCalls = make([]loop.ToolCall, len(tca.Calls))
-					for i, tc := range tca.Calls {
-						resp.ToolCalls[i] = loop.ToolCall{
-							Name:      tc.Name,
-							Arguments: tc.Arguments,
-						}
-					}
-					resp.Content = ""
-				}
+		resp = tryMatchContentToolCalls(resp)
+	}
+
+	return resp
+}
+
+func fromNativeResponse(result chatCompletion) loop.Response {
+	resp := loop.Response{
+		Content: strings.TrimLeft(result.Response, "\n"),
+		Done:    true,
+	}
+
+	if len(result.ToolCalls) > 0 {
+		resp.ToolCalls = make([]loop.ToolCall, len(result.ToolCalls))
+		for i, tc := range result.ToolCalls {
+			resp.ToolCalls[i] = loop.ToolCall{
+				Name:      tc.Name,
+				Arguments: tc.Arguments,
 			}
 		}
 	}
 
+	if len(resp.ToolCalls) == 0 && resp.Content != "" {
+		resp = tryMatchContentToolCalls(resp)
+	}
+
+	return resp
+}
+
+func tryMatchContentToolCalls(resp loop.Response) loop.Response {
+	matcher := stream.NewToolCallMatcher()
+	if matcher.Scan([]byte(resp.Content), "") == stream.FullMatch {
+		if action := matcher.Extract([]byte(resp.Content)); action != (stream.ContinueAction{}) {
+			if tca, ok := action.(stream.ToolCallAction); ok {
+				resp.ToolCalls = make([]loop.ToolCall, len(tca.Calls))
+				for i, tc := range tca.Calls {
+					resp.ToolCalls[i] = loop.ToolCall{
+						Name:      tc.Name,
+						Arguments: tc.Arguments,
+					}
+				}
+				resp.Content = ""
+			}
+		}
+	}
 	return resp
 }
 
@@ -295,7 +332,16 @@ type apiResponse struct {
 }
 
 type chatCompletion struct {
+	// OpenAI-compatible format: result.choices[].message.tool_calls
 	Choices []choice `json:"choices"`
+	// Native Workers AI format: result.response + result.tool_calls
+	Response  string           `json:"response"`
+	ToolCalls []nativeToolCall `json:"tool_calls"`
+}
+
+type nativeToolCall struct {
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
 }
 
 type choice struct {
