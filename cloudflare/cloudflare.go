@@ -54,7 +54,8 @@ func NewClient(baseURL, token string, opts ...Option) *Client {
 }
 
 // Chat sends a request to Workers AI and delivers the response through fn.
-// Streaming is not yet supported — the full response is returned in one call.
+// When req.Stream is true, the response is streamed via SSE with incremental
+// token delivery. Otherwise, the full response is returned in one call.
 func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
 	body := buildRequest(req)
 
@@ -77,6 +78,13 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 	}
 	defer httpResp.Body.Close()
 
+	if req.Stream {
+		return c.handleStream(httpResp, req.Tools, fn)
+	}
+	return c.handleFull(httpResp, req.Tools, fn)
+}
+
+func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn func(loop.Response) error) error {
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return fmt.Errorf("cloudflare: read response: %w", err)
@@ -96,8 +104,75 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 	}
 
 	resp := fromResponse(apiResp.Result)
-	normalizeToolCallArgs(&resp, req.Tools)
+	normalizeToolCallArgs(&resp, tools)
 	return fn(resp)
+}
+
+func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn func(loop.Response) error) error {
+	if httpResp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(httpResp.Body)
+		return fmt.Errorf("cloudflare: status %d: %s", httpResp.StatusCode, respBody)
+	}
+
+	// Accumulate structured tool calls by index.
+	type pendingToolCall struct {
+		name string
+		args strings.Builder
+	}
+	pending := make(map[int]*pendingToolCall)
+
+	err := parseSSE(httpResp.Body, func(ev sseEvent) error {
+		if ev.Done {
+			// Assemble accumulated tool calls.
+			var toolCalls []loop.ToolCall
+			for i := 0; i < len(pending); i++ {
+				tc := pending[i]
+				var args map[string]any
+				if tc.args.Len() > 0 {
+					json.Unmarshal([]byte(tc.args.String()), &args)
+				}
+				toolCalls = append(toolCalls, loop.ToolCall{
+					Name:      tc.name,
+					Arguments: args,
+				})
+			}
+
+			resp := loop.Response{Done: true, ToolCalls: toolCalls}
+			normalizeToolCallArgs(&resp, tools)
+			return fn(resp)
+		}
+
+		// Accumulate structured tool call deltas.
+		for _, tc := range ev.Delta.ToolCalls {
+			p, ok := pending[tc.Index]
+			if !ok {
+				p = &pendingToolCall{}
+				pending[tc.Index] = p
+			}
+			if tc.Function.Name != "" {
+				p.name = tc.Function.Name
+			}
+			p.args.WriteString(tc.Function.Arguments)
+		}
+
+		// Emit content tokens.
+		if ev.Delta.Content != "" {
+			if err := fn(loop.Response{Content: ev.Delta.Content}); err != nil {
+				return err
+			}
+		}
+
+		// Emit thinking tokens.
+		if ev.Delta.ReasoningContent != "" {
+			if err := fn(loop.Response{Thinking: ev.Delta.ReasoningContent}); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return err
 }
 
 func buildRequest(req *loop.Request) chatRequest {
@@ -121,6 +196,11 @@ func buildRequest(req *loop.Request) chatRequest {
 		cr.Tools = toTools(req.Tools)
 		t := true
 		cr.ParallelToolCalls = &t
+	}
+
+	if req.Stream {
+		s := true
+		cr.Stream = &s
 	}
 
 	return cr
@@ -339,6 +419,7 @@ type chatRequest struct {
 	Temperature       *float64  `json:"temperature,omitempty"`
 	Tools             []toolDef `json:"tools,omitempty"`
 	ParallelToolCalls *bool     `json:"parallel_tool_calls,omitempty"`
+	Stream            *bool     `json:"stream,omitempty"`
 }
 
 type message struct {
