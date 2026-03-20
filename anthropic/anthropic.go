@@ -45,7 +45,8 @@ func WithGatewayToken(token string) Option {
 //
 //	https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway}/anthropic
 //
-// apiKey is the Anthropic API key.
+// apiKey is the Anthropic API key. Pass "" if the gateway injects the
+// key server-side (e.g. Cloudflare AI Gateway with stored credentials).
 func NewClient(baseURL, apiKey string, opts ...Option) *Client {
 	c := &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
@@ -74,7 +75,9 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 	if err != nil {
 		return fmt.Errorf("anthropic: create request: %w", err)
 	}
-	httpReq.Header.Set("x-api-key", c.apiKey)
+	if c.apiKey != "" {
+		httpReq.Header.Set("x-api-key", c.apiKey)
+	}
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 	httpReq.Header.Set("Content-Type", "application/json")
 	if c.gatewayToken != "" {
