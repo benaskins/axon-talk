@@ -1,0 +1,507 @@
+// Package anthropic provides a loop.LLMClient implementation for the
+// Anthropic Messages API, routed through Cloudflare AI Gateway. It supports
+// model selection (Opus, Sonnet, Haiku) via the standard req.Model field.
+package anthropic
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
+	loop "github.com/benaskins/axon-loop"
+	tool "github.com/benaskins/axon-tool"
+)
+
+// Client implements loop.LLMClient for the Anthropic Messages API.
+type Client struct {
+	baseURL    string
+	apiKey     string
+	httpClient *http.Client
+}
+
+// Option configures a Client.
+type Option func(*Client)
+
+// WithHTTPClient sets a custom http.Client.
+func WithHTTPClient(c *http.Client) Option {
+	return func(cl *Client) { cl.httpClient = c }
+}
+
+// NewClient creates a Client that talks to the Anthropic Messages API.
+//
+// baseURL is the gateway endpoint, e.g.:
+//
+//	https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway}/anthropic
+//
+// apiKey is the Anthropic API key.
+func NewClient(baseURL, apiKey string, opts ...Option) *Client {
+	c := &Client{
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		apiKey:     apiKey,
+		httpClient: http.DefaultClient,
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// Chat sends a request to the Anthropic Messages API and delivers the
+// response through fn. When req.Stream is true, the response is streamed
+// via SSE with incremental token delivery.
+func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
+	body := c.buildRequest(req)
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("anthropic: marshal request: %w", err)
+	}
+
+	url := c.baseURL + "/v1/messages"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return fmt.Errorf("anthropic: create request: %w", err)
+	}
+	httpReq.Header.Set("x-api-key", c.apiKey)
+	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	httpResp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("anthropic: do request: %w", err)
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(httpResp.Body)
+		return fmt.Errorf("anthropic: status %d: %s", httpResp.StatusCode, respBody)
+	}
+
+	if req.Stream {
+		return c.handleStream(httpResp.Body, fn)
+	}
+	return c.handleFull(httpResp.Body, fn)
+}
+
+func (c *Client) handleFull(body io.Reader, fn func(loop.Response) error) error {
+	respBody, err := io.ReadAll(body)
+	if err != nil {
+		return fmt.Errorf("anthropic: read response: %w", err)
+	}
+
+	var apiResp messagesResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return fmt.Errorf("anthropic: decode response: %w", err)
+	}
+
+	return fn(fromResponse(apiResp))
+}
+
+func (c *Client) handleStream(body io.Reader, fn func(loop.Response) error) error {
+	scanner := bufio.NewScanner(body)
+
+	// Accumulate tool use blocks being built across events.
+	type pendingToolUse struct {
+		id   string
+		name string
+		args strings.Builder
+	}
+	var pending []*pendingToolUse
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.HasPrefix(line, "event: ") {
+			eventType := strings.TrimPrefix(line, "event: ")
+
+			// Read the data line.
+			if !scanner.Scan() {
+				break
+			}
+			dataLine := scanner.Text()
+			if !strings.HasPrefix(dataLine, "data: ") {
+				continue
+			}
+			data := strings.TrimPrefix(dataLine, "data: ")
+
+			switch eventType {
+			case "content_block_start":
+				var ev streamContentBlockStart
+				if err := json.Unmarshal([]byte(data), &ev); err != nil {
+					continue
+				}
+				if ev.ContentBlock.Type == "tool_use" {
+					pending = append(pending, &pendingToolUse{
+						id:   ev.ContentBlock.ID,
+						name: ev.ContentBlock.Name,
+					})
+				}
+
+			case "content_block_delta":
+				var ev streamContentBlockDelta
+				if err := json.Unmarshal([]byte(data), &ev); err != nil {
+					continue
+				}
+				switch ev.Delta.Type {
+				case "text_delta":
+					if err := fn(loop.Response{Content: ev.Delta.Text}); err != nil {
+						return err
+					}
+				case "input_json_delta":
+					if len(pending) > 0 {
+						pending[len(pending)-1].args.WriteString(ev.Delta.PartialJSON)
+					}
+				}
+
+			case "message_delta":
+				// Final event — assemble tool calls and signal done.
+				var toolCalls []loop.ToolCall
+				for _, p := range pending {
+					var args map[string]any
+					if p.args.Len() > 0 {
+						json.Unmarshal([]byte(p.args.String()), &args)
+					}
+					toolCalls = append(toolCalls, loop.ToolCall{
+						Name:      p.name,
+						Arguments: args,
+					})
+				}
+				if err := fn(loop.Response{Done: true, ToolCalls: toolCalls}); err != nil {
+					return err
+				}
+
+			case "message_stop":
+				// Stream complete.
+
+			case "error":
+				return fmt.Errorf("anthropic: stream error: %s", data)
+			}
+		}
+	}
+
+	return scanner.Err()
+}
+
+func (c *Client) buildRequest(req *loop.Request) messagesRequest {
+	msgs, system := toMessages(req.Messages)
+
+	mr := messagesRequest{
+		Model:    req.Model,
+		Messages: msgs,
+		System:   system,
+	}
+
+	// max_tokens is required by the Anthropic API.
+	mr.MaxTokens = 4096
+	if v, ok := req.Options["max_tokens"]; ok {
+		switch mt := v.(type) {
+		case int:
+			mr.MaxTokens = mt
+		case float64:
+			mr.MaxTokens = int(mt)
+		}
+	}
+
+	if v, ok := req.Options["temperature"]; ok {
+		if t, ok := v.(float64); ok {
+			mr.Temperature = &t
+		}
+	}
+
+	if len(req.Tools) > 0 {
+		mr.Tools = toTools(req.Tools)
+	}
+
+	if req.Stream {
+		mr.Stream = true
+	}
+
+	return mr
+}
+
+// toMessages converts loop.Messages to Anthropic message format,
+// extracting system messages into the separate system parameter.
+func toMessages(msgs []loop.Message) ([]message, []systemBlock) {
+	var out []message
+	var system []systemBlock
+
+	// Track tool call IDs: when an assistant message has tool calls,
+	// generate IDs that subsequent tool result messages can reference.
+	var pendingToolIDs []string
+
+	for _, m := range msgs {
+		if m.Role == "system" {
+			system = append(system, systemBlock{
+				Type: "text",
+				Text: m.Content,
+			})
+			continue
+		}
+
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			// Assistant message with tool use — convert to content blocks.
+			var blocks []contentBlock
+			if m.Content != "" {
+				blocks = append(blocks, contentBlock{
+					Type: "text",
+					Text: m.Content,
+				})
+			}
+			pendingToolIDs = nil
+			for i, tc := range m.ToolCalls {
+				id := fmt.Sprintf("toolu_%d", i)
+				pendingToolIDs = append(pendingToolIDs, id)
+				blocks = append(blocks, contentBlock{
+					Type:  "tool_use",
+					ID:    id,
+					Name:  tc.Name,
+					Input: tc.Arguments,
+				})
+			}
+			out = append(out, message{
+				Role:    "assistant",
+				Content: blocks,
+			})
+			continue
+		}
+
+		if m.Role == "tool" {
+			// Tool result — becomes a user message with tool_result content block.
+			// If there are pending tool IDs, consume the first one.
+			toolID := ""
+			if len(pendingToolIDs) > 0 {
+				toolID = pendingToolIDs[0]
+				pendingToolIDs = pendingToolIDs[1:]
+			}
+			block := contentBlock{
+				Type:      "tool_result",
+				ToolUseID: toolID,
+				Content:   m.Content,
+			}
+
+			// Merge consecutive tool results into a single user message.
+			if len(out) > 0 && out[len(out)-1].Role == "user" && len(out[len(out)-1].Content) > 0 && out[len(out)-1].Content[0].Type == "tool_result" {
+				out[len(out)-1].Content = append(out[len(out)-1].Content, block)
+			} else {
+				out = append(out, message{
+					Role:    "user",
+					Content: []contentBlock{block},
+				})
+			}
+			continue
+		}
+
+		// Regular user or assistant message.
+		out = append(out, message{
+			Role: m.Role,
+			Content: []contentBlock{{
+				Type: "text",
+				Text: m.Content,
+			}},
+		})
+	}
+
+	return out, system
+}
+
+func toTools(defs []tool.ToolDef) []toolDef {
+	out := make([]toolDef, len(defs))
+	for i, d := range defs {
+		out[i] = toolDef{
+			Name:        d.Name,
+			Description: d.Description,
+			InputSchema: toInputSchema(d.Parameters),
+		}
+	}
+	return out
+}
+
+func toInputSchema(ps tool.ParameterSchema) inputSchema {
+	return inputSchema{
+		Type:       ps.Type,
+		Required:   ps.Required,
+		Properties: toPropertyDefs(ps.Properties),
+	}
+}
+
+func toPropertyDefs(props map[string]tool.PropertySchema) map[string]propertyDef {
+	if len(props) == 0 {
+		return nil
+	}
+	out := make(map[string]propertyDef, len(props))
+	for name, prop := range props {
+		pd := propertyDef{
+			Type:        prop.Type,
+			Description: prop.Description,
+			Enum:        prop.Enum,
+		}
+		if prop.Items != nil {
+			items := toPropertyDef(*prop.Items)
+			pd.Items = &items
+		}
+		if len(prop.Properties) > 0 {
+			pd.Properties = toPropertyDefs(prop.Properties)
+			pd.Required = prop.Required
+		}
+		out[name] = pd
+	}
+	return out
+}
+
+func toPropertyDef(prop tool.PropertySchema) propertyDef {
+	pd := propertyDef{
+		Type:        prop.Type,
+		Description: prop.Description,
+		Enum:        prop.Enum,
+	}
+	if prop.Items != nil {
+		items := toPropertyDef(*prop.Items)
+		pd.Items = &items
+	}
+	if len(prop.Properties) > 0 {
+		pd.Properties = toPropertyDefs(prop.Properties)
+		pd.Required = prop.Required
+	}
+	return pd
+}
+
+func fromResponse(resp messagesResponse) loop.Response {
+	var content strings.Builder
+	var toolCalls []loop.ToolCall
+
+	for _, block := range resp.Content {
+		switch block.Type {
+		case "text":
+			content.WriteString(block.Text)
+		case "tool_use":
+			toolCalls = append(toolCalls, loop.ToolCall{
+				Name:      block.Name,
+				Arguments: block.Input,
+			})
+		}
+	}
+
+	return loop.Response{
+		Content:   content.String(),
+		ToolCalls: toolCalls,
+		Done:      true,
+	}
+}
+
+// Wire types for the Anthropic Messages API.
+
+type messagesRequest struct {
+	Model       string        `json:"model"`
+	Messages    []message     `json:"messages"`
+	System      []systemBlock `json:"system,omitempty"`
+	MaxTokens   int           `json:"max_tokens"`
+	Temperature *float64      `json:"temperature,omitempty"`
+	Tools       []toolDef     `json:"tools,omitempty"`
+	Stream      bool          `json:"stream,omitempty"`
+}
+
+type systemBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type message struct {
+	Role    string         `json:"role"`
+	Content []contentBlock `json:"content"`
+}
+
+type contentBlock struct {
+	Type      string         `json:"type"`
+	Text      string         `json:"text,omitempty"`
+	ID        string         `json:"id,omitempty"`
+	Name      string         `json:"name,omitempty"`
+	Input     map[string]any `json:"input,omitempty"`
+	ToolUseID string         `json:"tool_use_id,omitempty"`
+	Content   string         `json:"content,omitempty"`
+}
+
+// MarshalJSON handles the contentBlock's dual use of the "content" field.
+// For tool_result blocks, "content" is the tool output string.
+// For text blocks, "text" is the content. We need custom marshaling
+// because the struct has both Content and Text fields.
+func (cb contentBlock) MarshalJSON() ([]byte, error) {
+	switch cb.Type {
+	case "tool_result":
+		return json.Marshal(struct {
+			Type      string `json:"type"`
+			ToolUseID string `json:"tool_use_id"`
+			Content   string `json:"content"`
+		}{
+			Type:      cb.Type,
+			ToolUseID: cb.ToolUseID,
+			Content:   cb.Content,
+		})
+	case "tool_use":
+		return json.Marshal(struct {
+			Type  string         `json:"type"`
+			ID    string         `json:"id"`
+			Name  string         `json:"name"`
+			Input map[string]any `json:"input"`
+		}{
+			Type:  cb.Type,
+			ID:    cb.ID,
+			Name:  cb.Name,
+			Input: cb.Input,
+		})
+	default:
+		return json.Marshal(struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}{
+			Type: cb.Type,
+			Text: cb.Text,
+		})
+	}
+}
+
+type messagesResponse struct {
+	Content    []contentBlock `json:"content"`
+	StopReason string         `json:"stop_reason"`
+}
+
+type toolDef struct {
+	Name        string      `json:"name"`
+	Description string      `json:"description,omitempty"`
+	InputSchema inputSchema `json:"input_schema"`
+}
+
+type inputSchema struct {
+	Type       string                 `json:"type"`
+	Required   []string               `json:"required,omitempty"`
+	Properties map[string]propertyDef `json:"properties,omitempty"`
+}
+
+type propertyDef struct {
+	Type        string                 `json:"type"`
+	Description string                 `json:"description,omitempty"`
+	Enum        []any                  `json:"enum,omitempty"`
+	Items       *propertyDef           `json:"items,omitempty"`
+	Properties  map[string]propertyDef `json:"properties,omitempty"`
+	Required    []string               `json:"required,omitempty"`
+}
+
+// Streaming event types.
+
+type streamContentBlockStart struct {
+	ContentBlock contentBlock `json:"content_block"`
+}
+
+type streamContentBlockDelta struct {
+	Delta streamDelta `json:"delta"`
+}
+
+type streamDelta struct {
+	Type        string `json:"type"`
+	Text        string `json:"text,omitempty"`
+	PartialJSON string `json:"partial_json,omitempty"`
+}
