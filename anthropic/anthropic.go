@@ -19,9 +19,10 @@ import (
 
 // Client implements loop.LLMClient for the Anthropic Messages API.
 type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
+	baseURL      string
+	apiKey       string
+	gatewayToken string // optional Cloudflare AI Gateway auth token
+	httpClient   *http.Client
 }
 
 // Option configures a Client.
@@ -30,6 +31,12 @@ type Option func(*Client)
 // WithHTTPClient sets a custom http.Client.
 func WithHTTPClient(c *http.Client) Option {
 	return func(cl *Client) { cl.httpClient = c }
+}
+
+// WithGatewayToken sets a Cloudflare AI Gateway authentication token.
+// When set, requests include the cf-aig-authorization header.
+func WithGatewayToken(token string) Option {
+	return func(cl *Client) { cl.gatewayToken = token }
 }
 
 // NewClient creates a Client that talks to the Anthropic Messages API.
@@ -70,6 +77,9 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 	httpReq.Header.Set("x-api-key", c.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 	httpReq.Header.Set("Content-Type", "application/json")
+	if c.gatewayToken != "" {
+		httpReq.Header.Set("cf-aig-authorization", "Bearer "+c.gatewayToken)
+	}
 
 	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
