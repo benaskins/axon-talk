@@ -279,11 +279,15 @@ func toMessages(msgs []loop.Message) ([]message, []systemBlock) {
 			for i, tc := range m.ToolCalls {
 				id := fmt.Sprintf("toolu_%d", i)
 				pendingToolIDs = append(pendingToolIDs, id)
+				input := tc.Arguments
+				if input == nil {
+					input = map[string]any{}
+				}
 				blocks = append(blocks, contentBlock{
 					Type:  "tool_use",
 					ID:    id,
 					Name:  tc.Name,
-					Input: tc.Arguments,
+					Input: input,
 				})
 			}
 			out = append(out, message{
