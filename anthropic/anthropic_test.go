@@ -365,6 +365,46 @@ func TestChat_NoGatewayToken(t *testing.T) {
 	}
 }
 
+func TestChat_SystemOnlyMessages(t *testing.T) {
+	var gotBody messagesRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "What shall we discuss?"}},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	req := &loop.Request{
+		Model: "claude-opus-4-6",
+		Messages: []loop.Message{
+			{Role: "system", Content: "You are a journalist."},
+		},
+		Options: map[string]any{"max_tokens": 1024},
+	}
+
+	var got loop.Response
+	client.Chat(context.Background(), req, func(resp loop.Response) error {
+		got = resp
+		return nil
+	})
+
+	if len(gotBody.System) != 1 {
+		t.Errorf("system blocks = %d, want 1", len(gotBody.System))
+	}
+	if len(gotBody.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (placeholder)", len(gotBody.Messages))
+	}
+	if gotBody.Messages[0].Role != "user" {
+		t.Errorf("placeholder role = %q, want user", gotBody.Messages[0].Role)
+	}
+	if got.Content != "What shall we discuss?" {
+		t.Errorf("content = %q", got.Content)
+	}
+}
+
 func TestChat_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

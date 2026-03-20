@@ -92,7 +92,7 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
-		return fmt.Errorf("anthropic: status %d: %s", httpResp.StatusCode, respBody)
+		return fmt.Errorf("anthropic: status %d: %s (url: %s)", httpResp.StatusCode, respBody, url)
 	}
 
 	if req.Stream {
@@ -202,6 +202,16 @@ func (c *Client) handleStream(body io.Reader, fn func(loop.Response) error) erro
 
 func (c *Client) buildRequest(req *loop.Request) messagesRequest {
 	msgs, system := toMessages(req.Messages)
+
+	// Anthropic API requires at least one message in the messages array.
+	// When only a system prompt is provided (e.g. to get the LLM to
+	// initiate conversation), add a minimal user message.
+	if len(msgs) == 0 {
+		msgs = []message{{
+			Role:    "user",
+			Content: []contentBlock{{Type: "text", Text: "Begin."}},
+		}}
+	}
 
 	mr := messagesRequest{
 		Model:    req.Model,
