@@ -64,7 +64,7 @@ func toMessages(msgs []loop.Message) []ollamaapi.Message {
 	out := make([]ollamaapi.Message, len(msgs))
 	for i, m := range msgs {
 		out[i] = ollamaapi.Message{
-			Role:     m.Role,
+			Role:     string(m.Role),
 			Content:  m.Content,
 			Thinking: m.Thinking,
 		}

@@ -325,7 +325,7 @@ func toMessages(msgs []loop.Message) ([]message, []systemBlock) {
 
 		// Regular user or assistant message.
 		out = append(out, message{
-			Role: m.Role,
+			Role: string(m.Role),
 			Content: []contentBlock{{
 				Type: "text",
 				Text: m.Content,

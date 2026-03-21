@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/benaskins/axon v0.4.3
-	github.com/benaskins/axon-loop v0.3.0
+	github.com/benaskins/axon-loop v0.6.0
 	github.com/benaskins/axon-tool v0.1.6
 	github.com/ollama/ollama v0.17.6
 )

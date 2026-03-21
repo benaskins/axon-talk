@@ -278,7 +278,7 @@ func toMessages(msgs []loop.Message, think *bool) []message {
 		}
 
 		msg := message{
-			Role:    m.Role,
+			Role:    string(m.Role),
 			Content: content,
 		}
 
