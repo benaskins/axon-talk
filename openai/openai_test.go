@@ -432,6 +432,52 @@ func TestChat_ToolCallIDs(t *testing.T) {
 	}
 }
 
+func TestChat_GatewayToken(t *testing.T) {
+	var gotHeader string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("cf-aig-authorization")
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token", WithGatewayToken("my-gw-token"))
+	req := &loop.Request{
+		Model:    "gpt-4o",
+		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+	}
+
+	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+
+	if gotHeader != "Bearer my-gw-token" {
+		t.Errorf("cf-aig-authorization = %q, want %q", gotHeader, "Bearer my-gw-token")
+	}
+}
+
+func TestChat_NoGatewayToken(t *testing.T) {
+	var gotHeader string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("cf-aig-authorization")
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &loop.Request{
+		Model:    "gpt-4o",
+		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+	}
+
+	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+
+	if gotHeader != "" {
+		t.Errorf("cf-aig-authorization should be empty when no gateway token set, got %q", gotHeader)
+	}
+}
+
 func TestChat_MaxTokensFromOptions(t *testing.T) {
 	var gotBody chatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

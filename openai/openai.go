@@ -20,9 +20,10 @@ import (
 
 // Client implements loop.LLMClient for OpenAI-compatible APIs.
 type Client struct {
-	baseURL    string
-	token      string
-	httpClient *http.Client
+	baseURL      string
+	token        string
+	gatewayToken string // optional gateway auth token (e.g. Cloudflare AI Gateway)
+	httpClient   *http.Client
 }
 
 // Option configures a Client.
@@ -31,6 +32,13 @@ type Option func(*Client)
 // WithHTTPClient sets a custom http.Client (useful for testing).
 func WithHTTPClient(c *http.Client) Option {
 	return func(cl *Client) { cl.httpClient = c }
+}
+
+// WithGatewayToken sets a gateway authentication token.
+// When set, requests include the cf-aig-authorization header
+// for use with Cloudflare AI Gateway or similar proxies.
+func WithGatewayToken(token string) Option {
+	return func(cl *Client) { cl.gatewayToken = token }
 }
 
 // NewClient creates a Client that talks to an OpenAI-compatible API.
@@ -68,6 +76,9 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+c.token)
 	httpReq.Header.Set("Content-Type", "application/json")
+	if c.gatewayToken != "" {
+		httpReq.Header.Set("cf-aig-authorization", "Bearer "+c.gatewayToken)
+	}
 
 	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {

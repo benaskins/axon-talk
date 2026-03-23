@@ -8,6 +8,45 @@ import (
 	loop "github.com/benaskins/axon-loop"
 )
 
+func TestLive_StreamingDirect(t *testing.T) {
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
+		t.Skip("ANTHROPIC_API_KEY required")
+	}
+
+	client := NewClient("https://api.anthropic.com", apiKey)
+
+	req := &loop.Request{
+		Model: "claude-sonnet-4-6",
+		Messages: []loop.Message{
+			{Role: "system", Content: "Reply in exactly 3 words."},
+			{Role: "user", Content: "Hello"},
+		},
+		Stream:  true,
+		Options: map[string]any{"max_tokens": 32},
+	}
+
+	var content string
+	var gotDone bool
+	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+		content += resp.Content
+		if resp.Done {
+			gotDone = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+	if !gotDone {
+		t.Error("never received done=true")
+	}
+	if content == "" {
+		t.Error("empty response content")
+	}
+	t.Logf("response: %q", content)
+}
+
 func TestLive_StreamingViaGateway(t *testing.T) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")

@@ -460,7 +460,32 @@ func TestChat_MultipleContentBlocks(t *testing.T) {
 	}
 }
 
-func TestChat_RequestURL(t *testing.T) {
+func TestChat_RequestURL_Direct(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "ok"}},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	req := &loop.Request{
+		Model:    "claude-opus-4-6",
+		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Options:  map[string]any{"max_tokens": 1024},
+	}
+
+	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+
+	if gotPath != "/v1/messages" {
+		t.Errorf("path = %q, want /v1/messages", gotPath)
+	}
+}
+
+func TestChat_RequestURL_Gateway(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path

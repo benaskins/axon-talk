@@ -1,6 +1,7 @@
 // Package anthropic provides a loop.LLMClient implementation for the
-// Anthropic Messages API, routed through Cloudflare AI Gateway. It supports
-// model selection (Opus, Sonnet, Haiku) via the standard req.Model field.
+// Anthropic Messages API. It supports model selection (Opus, Sonnet, Haiku)
+// via the standard req.Model field. Works directly against api.anthropic.com
+// or through a gateway such as Cloudflare AI Gateway.
 package anthropic
 
 import (
@@ -41,11 +42,12 @@ func WithGatewayToken(token string) Option {
 
 // NewClient creates a Client that talks to the Anthropic Messages API.
 //
-// baseURL is the gateway endpoint, e.g.:
+// baseURL is the API root, e.g. "https://api.anthropic.com" for direct access,
+// or a gateway URL like:
 //
 //	https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway}/anthropic
 //
-// apiKey is the Anthropic API key. Pass "" if the gateway injects the
+// apiKey is the Anthropic API key. Pass "" if a gateway injects the
 // key server-side (e.g. Cloudflare AI Gateway with stored credentials).
 func NewClient(baseURL, apiKey string, opts ...Option) *Client {
 	c := &Client{
