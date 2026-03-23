@@ -31,8 +31,12 @@ func main() {
 	}
 
 	// Run the conversation loop, printing tokens as they arrive.
-	_, err = loop.Run(ctx, client, req, nil, nil, loop.Callbacks{
-		OnToken: func(token string) { fmt.Print(token) },
+	_, err = loop.Run(ctx, loop.RunConfig{
+		Client:  client,
+		Request: req,
+		Callbacks: loop.Callbacks{
+			OnToken: func(token string) { fmt.Print(token) },
+		},
 	})
 	if err != nil {
 		log.Fatal(err)
