@@ -7,12 +7,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
 
 func TestClientImplementsLLMClient(t *testing.T) {
-	var _ loop.LLMClient = NewClient("http://example.com", "token")
+	var _ talk.LLMClient = NewClient("http://example.com", "token")
 }
 
 func TestChat_BasicResponse(t *testing.T) {
@@ -33,13 +33,13 @@ func TestChat_BasicResponse(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "What is 2+2?"}},
+		Messages: []talk.Message{{Role: "user", Content: "What is 2+2?"}},
 	}
 
-	var got loop.Response
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -65,12 +65,12 @@ func TestChat_ModelInRequestBody(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o-mini",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotBody.Model != "gpt-4o-mini" {
 		t.Errorf("model = %q, want gpt-4o-mini", gotBody.Model)
@@ -88,12 +88,12 @@ func TestChat_EndpointPath(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotPath != "/v1/chat/completions" {
 		t.Errorf("path = %q, want /v1/chat/completions", gotPath)
@@ -114,13 +114,13 @@ func TestChat_WithThinking(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "o3",
-		Messages: []loop.Message{{Role: "user", Content: "What is 2+2?"}},
+		Messages: []talk.Message{{Role: "user", Content: "What is 2+2?"}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -147,9 +147,9 @@ func TestChat_WithToolCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "Weather in Sydney?"}},
+		Messages: []talk.Message{{Role: "user", Content: "Weather in Sydney?"}},
 		Tools: []tool.ToolDef{{
 			Name:        "get_weather",
 			Description: "Get weather",
@@ -163,8 +163,8 @@ func TestChat_WithToolCalls(t *testing.T) {
 		}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -198,9 +198,9 @@ func TestChat_NormalizesToolCallArgs(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "Set temp to 22"}},
+		Messages: []talk.Message{{Role: "user", Content: "Set temp to 22"}},
 		Tools: []tool.ToolDef{{
 			Name: "set_temp",
 			Parameters: tool.ParameterSchema{
@@ -213,8 +213,8 @@ func TestChat_NormalizesToolCallArgs(t *testing.T) {
 		}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -241,9 +241,9 @@ func TestChat_RichSchemaInRequest(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Tools: []tool.ToolDef{{
 			Name: "create_event",
 			Parameters: tool.ParameterSchema{
@@ -275,7 +275,7 @@ func TestChat_RichSchemaInRequest(t *testing.T) {
 		}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if len(gotBody.Tools) != 1 {
 		t.Fatalf("got %d tools, want 1", len(gotBody.Tools))
@@ -310,9 +310,9 @@ func TestChat_ToolsSentInRequest(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Tools: []tool.ToolDef{{
 			Name:        "search",
 			Description: "Search the web",
@@ -327,7 +327,7 @@ func TestChat_ToolsSentInRequest(t *testing.T) {
 		}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if len(gotBody.Tools) != 1 {
 		t.Fatalf("got %d tools, want 1", len(gotBody.Tools))
@@ -354,12 +354,12 @@ func TestChat_APIError(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "bad-token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 	if err == nil {
 		t.Fatal("expected error for 401 response")
 	}
@@ -372,13 +372,13 @@ func TestChat_EmptyChoices(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -402,18 +402,18 @@ func TestChat_ToolCallIDs(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "gpt-4o",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "user", Content: "search for go"},
-			{Role: "assistant", ToolCalls: []loop.ToolCall{
+			{Role: "assistant", ToolCalls: []talk.ToolCall{
 				{Name: "search", Arguments: map[string]any{"q": "go"}},
 			}},
 			{Role: "tool", Content: "results: golang.org"},
 		},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	assistantMsg := gotBody.Messages[1]
 	if len(assistantMsg.ToolCalls) != 1 {
@@ -443,12 +443,12 @@ func TestChat_GatewayToken(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token", WithGatewayToken("my-gw-token"))
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotHeader != "Bearer my-gw-token" {
 		t.Errorf("cf-aig-authorization = %q, want %q", gotHeader, "Bearer my-gw-token")
@@ -466,12 +466,12 @@ func TestChat_NoGatewayToken(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotHeader != "" {
 		t.Errorf("cf-aig-authorization should be empty when no gateway token set, got %q", gotHeader)
@@ -489,13 +489,13 @@ func TestChat_MaxTokensFromOptions(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "gpt-4o",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"max_tokens": 500},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotBody.MaxTokens != 500 {
 		t.Errorf("max_tokens = %d, want 500", gotBody.MaxTokens)

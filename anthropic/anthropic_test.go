@@ -7,12 +7,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
 
 func TestClientImplementsLLMClient(t *testing.T) {
-	var _ loop.LLMClient = NewClient("http://example.com", "key")
+	var _ talk.LLMClient = NewClient("http://example.com", "key")
 }
 
 func TestChat_BasicResponse(t *testing.T) {
@@ -38,14 +38,14 @@ func TestChat_BasicResponse(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "What is 2+2?"}},
+		Messages: []talk.Message{{Role: "user", Content: "What is 2+2?"}},
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
-	var got loop.Response
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -72,16 +72,16 @@ func TestChat_SystemPromptExtracted(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "claude-opus-4-6",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "system", Content: "You are helpful."},
 			{Role: "user", Content: "hi"},
 		},
 		Options: map[string]any{"max_tokens": 1024},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if len(gotBody.System) != 1 || gotBody.System[0].Text != "You are helpful." {
 		t.Errorf("system = %+v, want [{text: You are helpful.}]", gotBody.System)
@@ -106,13 +106,13 @@ func TestChat_ModelInRequest(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-sonnet-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotBody.Model != "claude-sonnet-4-6" {
 		t.Errorf("model = %q, want claude-sonnet-4-6", gotBody.Model)
@@ -134,9 +134,9 @@ func TestChat_WithToolCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "Weather in Sydney?"}},
+		Messages: []talk.Message{{Role: "user", Content: "Weather in Sydney?"}},
 		Tools: []tool.ToolDef{{
 			Name:        "get_weather",
 			Description: "Get weather",
@@ -151,8 +151,8 @@ func TestChat_WithToolCalls(t *testing.T) {
 		Options: map[string]any{"max_tokens": 1024},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -180,11 +180,11 @@ func TestChat_ToolResultsInMessages(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "claude-opus-4-6",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "user", Content: "Weather?"},
-			{Role: "assistant", ToolCalls: []loop.ToolCall{
+			{Role: "assistant", ToolCalls: []talk.ToolCall{
 				{Name: "get_weather", Arguments: map[string]any{"city": "Sydney"}},
 			}},
 			{Role: "tool", Content: "Sunny, 22°C"},
@@ -192,7 +192,7 @@ func TestChat_ToolResultsInMessages(t *testing.T) {
 		Options: map[string]any{"max_tokens": 1024},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if len(gotBody.Messages) != 3 {
 		t.Fatalf("got %d messages, want 3", len(gotBody.Messages))
@@ -235,9 +235,9 @@ func TestChat_ToolsSentInRequest(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Tools: []tool.ToolDef{{
 			Name:        "search",
 			Description: "Search the web",
@@ -253,7 +253,7 @@ func TestChat_ToolsSentInRequest(t *testing.T) {
 		Options: map[string]any{"max_tokens": 1024},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if len(gotBody.Tools) != 1 {
 		t.Fatalf("got %d tools, want 1", len(gotBody.Tools))
@@ -278,13 +278,13 @@ func TestChat_MaxTokensFromOptions(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"max_tokens": 500},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotBody.MaxTokens != 500 {
 		t.Errorf("max_tokens = %d, want 500", gotBody.MaxTokens)
@@ -303,12 +303,12 @@ func TestChat_DefaultMaxTokens(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotBody.MaxTokens != 4096 {
 		t.Errorf("max_tokens = %d, want 4096 (default)", gotBody.MaxTokens)
@@ -327,13 +327,13 @@ func TestChat_GatewayToken(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key", WithGatewayToken("my-gw-token"))
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotHeader != "Bearer my-gw-token" {
 		t.Errorf("cf-aig-authorization = %q, want %q", gotHeader, "Bearer my-gw-token")
@@ -352,13 +352,13 @@ func TestChat_NoGatewayToken(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotHeader != "" {
 		t.Errorf("cf-aig-authorization should be empty when no gateway token set, got %q", gotHeader)
@@ -377,16 +377,16 @@ func TestChat_SystemOnlyMessages(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "claude-opus-4-6",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "system", Content: "You are a journalist."},
 		},
 		Options: map[string]any{"max_tokens": 1024},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -413,12 +413,12 @@ func TestChat_APIError(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "bad-key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 	if err == nil {
 		t.Fatal("expected error for 401 response")
 	}
@@ -437,14 +437,14 @@ func TestChat_MultipleContentBlocks(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "search test"}},
+		Messages: []talk.Message{{Role: "user", Content: "search test"}},
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -472,13 +472,13 @@ func TestChat_RequestURL_Direct(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotPath != "/v1/messages" {
 		t.Errorf("path = %q, want /v1/messages", gotPath)
@@ -497,13 +497,13 @@ func TestChat_RequestURL_Gateway(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL+"/v1/account123/axon-gate/anthropic", "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotPath != "/v1/account123/axon-gate/anthropic/v1/messages" {
 		t.Errorf("path = %q, want /v1/account123/axon-gate/anthropic/v1/messages", gotPath)
@@ -522,13 +522,13 @@ func TestChat_TemperatureFromOptions(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"max_tokens": 1024, "temperature": 0.7},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotBody.Temperature == nil || *gotBody.Temperature != 0.7 {
 		t.Errorf("temperature = %v, want 0.7", gotBody.Temperature)
@@ -548,14 +548,14 @@ func TestChat_MultipleToolCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "Weather in Sydney and Melbourne?"}},
+		Messages: []talk.Message{{Role: "user", Content: "Weather in Sydney and Melbourne?"}},
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -580,11 +580,11 @@ func TestChat_MultipleToolResultsInMessages(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "claude-opus-4-6",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "user", Content: "Weather?"},
-			{Role: "assistant", ToolCalls: []loop.ToolCall{
+			{Role: "assistant", ToolCalls: []talk.ToolCall{
 				{Name: "get_weather", Arguments: map[string]any{"city": "Sydney"}},
 				{Name: "get_weather", Arguments: map[string]any{"city": "Melbourne"}},
 			}},
@@ -594,7 +594,7 @@ func TestChat_MultipleToolResultsInMessages(t *testing.T) {
 		Options: map[string]any{"max_tokens": 1024},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	// In Anthropic API, multiple tool results for the same assistant turn
 	// should be combined into a single user message with multiple tool_result blocks.

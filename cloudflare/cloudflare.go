@@ -1,4 +1,4 @@
-// Package cloudflare provides a loop.LLMClient implementation for
+// Package cloudflare provides a talk.LLMClient implementation for
 // Cloudflare Workers AI via the AI Gateway. It speaks the OpenAI-compatible
 // chat completions API that Workers AI exposes. No external dependencies
 // beyond net/http and encoding/json.
@@ -14,11 +14,11 @@ import (
 	"strings"
 
 	"github.com/benaskins/axon/stream"
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
 
-// Client implements loop.LLMClient for Cloudflare Workers AI.
+// Client implements talk.LLMClient for Cloudflare Workers AI.
 type Client struct {
 	baseURL      string
 	token        string
@@ -63,7 +63,7 @@ func NewClient(baseURL, token string, opts ...Option) *Client {
 // Chat sends a request to Workers AI and delivers the response through fn.
 // When req.Stream is true, the response is streamed via SSE with incremental
 // token delivery. Otherwise, the full response is returned in one call.
-func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
+func (c *Client) Chat(ctx context.Context, req *talk.Request, fn func(talk.Response) error) error {
 	body := buildRequest(req)
 
 	jsonBody, err := json.Marshal(body)
@@ -94,7 +94,7 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 	return c.handleFull(httpResp, req.Tools, fn)
 }
 
-func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn func(loop.Response) error) error {
+func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn func(talk.Response) error) error {
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return fmt.Errorf("cloudflare: read response: %w", err)
@@ -118,7 +118,7 @@ func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn fu
 	return fn(resp)
 }
 
-func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn func(loop.Response) error) error {
+func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn func(talk.Response) error) error {
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
 		return fmt.Errorf("cloudflare: status %d: %s", httpResp.StatusCode, respBody)
@@ -141,7 +141,7 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 			if filterErr != nil {
 				return
 			}
-			filterErr = fn(loop.Response{Content: token})
+			filterErr = fn(talk.Response{Content: token})
 		},
 		[]stream.Matcher{stream.NewToolCallMatcher()},
 		stream.DefaultMaxBuffer,
@@ -164,13 +164,13 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 				if tc.args.Len() > 0 {
 					json.Unmarshal([]byte(tc.args.String()), &args)
 				}
-				toolCalls = append(toolCalls, loop.ToolCall{
+				toolCalls = append(toolCalls, talk.ToolCall{
 					Name:      tc.name,
 					Arguments: args,
 				})
 			}
 
-			resp := loop.Response{Done: true, ToolCalls: toolCalls}
+			resp := talk.Response{Done: true, ToolCalls: toolCalls}
 			normalizeToolCallArgs(&resp, tools)
 			return fn(resp)
 		}
@@ -197,7 +197,7 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 			// If the filter detected a complete tool call in content,
 			// emit it immediately.
 			if toolCalls := collectFilterToolCalls(action); len(toolCalls) > 0 {
-				if err := fn(loop.Response{ToolCalls: toolCalls}); err != nil {
+				if err := fn(talk.Response{ToolCalls: toolCalls}); err != nil {
 					return err
 				}
 			}
@@ -205,7 +205,7 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 
 		// Emit thinking tokens directly (no filtering needed).
 		if ev.Delta.ReasoningContent != "" {
-			if err := fn(loop.Response{Thinking: ev.Delta.ReasoningContent}); err != nil {
+			if err := fn(talk.Response{Thinking: ev.Delta.ReasoningContent}); err != nil {
 				return err
 			}
 		}
@@ -220,14 +220,14 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 }
 
 // collectFilterToolCalls converts a StreamFilter action into tool calls.
-func collectFilterToolCalls(action stream.FilterAction) []loop.ToolCall {
+func collectFilterToolCalls(action stream.FilterAction) []talk.ToolCall {
 	tca, ok := action.(stream.ToolCallAction)
 	if !ok || len(tca.Calls) == 0 {
 		return nil
 	}
-	calls := make([]loop.ToolCall, len(tca.Calls))
+	calls := make([]talk.ToolCall, len(tca.Calls))
 	for i, tc := range tca.Calls {
-		calls[i] = loop.ToolCall{
+		calls[i] = talk.ToolCall{
 			Name:      tc.Name,
 			Arguments: tc.Arguments,
 		}
@@ -235,7 +235,7 @@ func collectFilterToolCalls(action stream.FilterAction) []loop.ToolCall {
 	return calls
 }
 
-func buildRequest(req *loop.Request) chatRequest {
+func buildRequest(req *talk.Request) chatRequest {
 	cr := chatRequest{
 		Messages: toMessages(req.Messages, req.Think),
 	}
@@ -266,7 +266,7 @@ func buildRequest(req *loop.Request) chatRequest {
 	return cr
 }
 
-func toMessages(msgs []loop.Message, think *bool) []message {
+func toMessages(msgs []talk.Message, think *bool) []message {
 	out := make([]message, 0, len(msgs))
 	// Track pending tool call IDs so we can match tool results.
 	var pendingCallIDs []string
@@ -301,7 +301,7 @@ func toMessages(msgs []loop.Message, think *bool) []message {
 	return out
 }
 
-func toRequestToolCalls(calls []loop.ToolCall) []requestToolCall {
+func toRequestToolCalls(calls []talk.ToolCall) []requestToolCall {
 	out := make([]requestToolCall, len(calls))
 	for i, tc := range calls {
 		args, _ := json.Marshal(tc.Arguments)
@@ -363,7 +363,7 @@ func toPropertyDef(prop tool.PropertySchema) propertyDef {
 	return pd
 }
 
-func fromResponse(result chatCompletion) loop.Response {
+func fromResponse(result chatCompletion) talk.Response {
 	// OpenAI-compatible format: choices[].message with nested tool_calls.
 	if len(result.Choices) > 0 {
 		return fromOpenAIResponse(result.Choices[0])
@@ -374,22 +374,22 @@ func fromResponse(result chatCompletion) loop.Response {
 		return fromNativeResponse(result)
 	}
 
-	return loop.Response{Done: true}
+	return talk.Response{Done: true}
 }
 
-func fromOpenAIResponse(choice choice) loop.Response {
-	resp := loop.Response{
+func fromOpenAIResponse(choice choice) talk.Response {
+	resp := talk.Response{
 		Content:  strings.TrimLeft(choice.Message.Content, "\n"),
 		Thinking: strings.TrimSpace(choice.Message.ReasoningContent),
 		Done:     true,
 	}
 
 	if len(choice.Message.ToolCalls) > 0 {
-		resp.ToolCalls = make([]loop.ToolCall, len(choice.Message.ToolCalls))
+		resp.ToolCalls = make([]talk.ToolCall, len(choice.Message.ToolCalls))
 		for i, tc := range choice.Message.ToolCalls {
 			var args map[string]any
 			json.Unmarshal([]byte(tc.Function.Arguments), &args)
-			resp.ToolCalls[i] = loop.ToolCall{
+			resp.ToolCalls[i] = talk.ToolCall{
 				Name:      tc.Function.Name,
 				Arguments: args,
 			}
@@ -406,16 +406,16 @@ func fromOpenAIResponse(choice choice) loop.Response {
 	return resp
 }
 
-func fromNativeResponse(result chatCompletion) loop.Response {
-	resp := loop.Response{
+func fromNativeResponse(result chatCompletion) talk.Response {
+	resp := talk.Response{
 		Content: strings.TrimLeft(result.Response, "\n"),
 		Done:    true,
 	}
 
 	if len(result.ToolCalls) > 0 {
-		resp.ToolCalls = make([]loop.ToolCall, len(result.ToolCalls))
+		resp.ToolCalls = make([]talk.ToolCall, len(result.ToolCalls))
 		for i, tc := range result.ToolCalls {
-			resp.ToolCalls[i] = loop.ToolCall{
+			resp.ToolCalls[i] = talk.ToolCall{
 				Name:      tc.Name,
 				Arguments: tc.Arguments,
 			}
@@ -429,14 +429,14 @@ func fromNativeResponse(result chatCompletion) loop.Response {
 	return resp
 }
 
-func tryMatchContentToolCalls(resp loop.Response) loop.Response {
+func tryMatchContentToolCalls(resp talk.Response) talk.Response {
 	matcher := stream.NewToolCallMatcher()
 	if matcher.Scan([]byte(resp.Content), "") == stream.FullMatch {
 		if action := matcher.Extract([]byte(resp.Content)); action != (stream.ContinueAction{}) {
 			if tca, ok := action.(stream.ToolCallAction); ok {
-				resp.ToolCalls = make([]loop.ToolCall, len(tca.Calls))
+				resp.ToolCalls = make([]talk.ToolCall, len(tca.Calls))
 				for i, tc := range tca.Calls {
-					resp.ToolCalls[i] = loop.ToolCall{
+					resp.ToolCalls[i] = talk.ToolCall{
 						Name:      tc.Name,
 						Arguments: tc.Arguments,
 					}
@@ -450,7 +450,7 @@ func tryMatchContentToolCalls(resp loop.Response) loop.Response {
 
 // normalizeToolCallArgs coerces tool call argument types to match the
 // JSON Schema types declared in each tool's parameter schema.
-func normalizeToolCallArgs(resp *loop.Response, tools []tool.ToolDef) {
+func normalizeToolCallArgs(resp *talk.Response, tools []tool.ToolDef) {
 	if len(resp.ToolCalls) == 0 || len(tools) == 0 {
 		return
 	}

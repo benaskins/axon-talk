@@ -7,12 +7,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
 
 func TestClientImplementsLLMClient(t *testing.T) {
-	var _ loop.LLMClient = NewClient("http://example.com", "token", WithHTTPClient(http.DefaultClient))
+	var _ talk.LLMClient = NewClient("http://example.com", "token", WithHTTPClient(http.DefaultClient))
 }
 
 func TestChat_BasicResponse(t *testing.T) {
@@ -36,13 +36,13 @@ func TestChat_BasicResponse(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "@cf/qwen/qwen3-30b-a3b-fp8",
-		Messages: []loop.Message{{Role: "user", Content: "What is 2+2?"}},
+		Messages: []talk.Message{{Role: "user", Content: "What is 2+2?"}},
 	}
 
-	var got loop.Response
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -74,13 +74,13 @@ func TestChat_WithThinking(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "What is 2+2?"}},
+		Messages: []talk.Message{{Role: "user", Content: "What is 2+2?"}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -105,13 +105,13 @@ func TestChat_NoThinkPrefix(t *testing.T) {
 
 	client := NewClient(server.URL, "token")
 	think := false
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "What is 2+2?"}},
+		Messages: []talk.Message{{Role: "user", Content: "What is 2+2?"}},
 		Think:    &think,
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if len(gotMessages) != 1 {
 		t.Fatalf("got %d messages, want 1", len(gotMessages))
@@ -137,13 +137,13 @@ func TestChat_ThinkEnabled_NoPrefix(t *testing.T) {
 
 	client := NewClient(server.URL, "token")
 	think := true
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "What is 2+2?"}},
+		Messages: []talk.Message{{Role: "user", Content: "What is 2+2?"}},
 		Think:    &think,
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotMessages[0].Content != "What is 2+2?" {
 		t.Errorf("content = %q, should not have /no_think prefix", gotMessages[0].Content)
@@ -171,9 +171,9 @@ func TestChat_WithToolCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "Weather in Sydney?"}},
+		Messages: []talk.Message{{Role: "user", Content: "Weather in Sydney?"}},
 		Tools: []tool.ToolDef{{
 			Name:        "get_weather",
 			Description: "Get weather",
@@ -187,8 +187,8 @@ func TestChat_WithToolCalls(t *testing.T) {
 		}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -226,9 +226,9 @@ func TestChat_NormalizesToolCallArgs(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "Set temp to 22"}},
+		Messages: []talk.Message{{Role: "user", Content: "Set temp to 22"}},
 		Tools: []tool.ToolDef{{
 			Name: "set_temp",
 			Parameters: tool.ParameterSchema{
@@ -241,8 +241,8 @@ func TestChat_NormalizesToolCallArgs(t *testing.T) {
 		}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -270,9 +270,9 @@ func TestChat_RichSchemaInRequest(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Tools: []tool.ToolDef{{
 			Name: "create_event",
 			Parameters: tool.ParameterSchema{
@@ -304,7 +304,7 @@ func TestChat_RichSchemaInRequest(t *testing.T) {
 		}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if len(gotBody.Tools) != 1 {
 		t.Fatalf("got %d tools, want 1", len(gotBody.Tools))
@@ -348,9 +348,9 @@ func TestChat_ToolsSentInRequest(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Tools: []tool.ToolDef{{
 			Name:        "search",
 			Description: "Search the web",
@@ -365,7 +365,7 @@ func TestChat_ToolsSentInRequest(t *testing.T) {
 		}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if len(gotBody.Tools) != 1 {
 		t.Fatalf("got %d tools, want 1", len(gotBody.Tools))
@@ -395,12 +395,12 @@ func TestChat_APIError(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "bad-token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 	if err == nil {
 		t.Fatal("expected error for 401 response")
 	}
@@ -416,13 +416,13 @@ func TestChat_EmptyChoices(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -447,12 +447,12 @@ func TestChat_ModelInURL(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL+"/v1/gateway", "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "@cf/qwen/qwen3-30b-a3b-fp8",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotPath != "/v1/gateway/@cf/qwen/qwen3-30b-a3b-fp8" {
 		t.Errorf("path = %q, want /v1/gateway/@cf/qwen/qwen3-30b-a3b-fp8", gotPath)
@@ -471,18 +471,18 @@ func TestChat_ToolCallIDs(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "model",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "user", Content: "search for go"},
-			{Role: "assistant", ToolCalls: []loop.ToolCall{
+			{Role: "assistant", ToolCalls: []talk.ToolCall{
 				{Name: "search", Arguments: map[string]any{"q": "go"}},
 			}},
 			{Role: "tool", Content: "results: golang.org"},
 		},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	// Assistant message should have tool call with ID
 	assistantMsg := gotBody.Messages[1]
@@ -515,18 +515,18 @@ func TestChat_MessagesWithToolCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "model",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "user", Content: "Weather?"},
-			{Role: "assistant", ToolCalls: []loop.ToolCall{
+			{Role: "assistant", ToolCalls: []talk.ToolCall{
 				{Name: "get_weather", Arguments: map[string]any{"city": "Sydney"}},
 			}},
 			{Role: "tool", Content: "Sunny, 22°C"},
 		},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if len(gotBody.Messages) != 3 {
 		t.Fatalf("got %d messages, want 3", len(gotBody.Messages))
@@ -551,13 +551,13 @@ func TestChat_MaxTokensFromOptions(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"max_tokens": 500},
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotBody.MaxTokens != 500 {
 		t.Errorf("max_tokens = %d, want 500", gotBody.MaxTokens)
@@ -571,12 +571,12 @@ func TestChat_APISuccessFalse(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 	if err == nil {
 		t.Fatal("expected error for success=false")
 	}
@@ -601,13 +601,13 @@ func TestChat_ToolCallInContent_Fallback(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "Weather in Sydney?"}},
+		Messages: []talk.Message{{Role: "user", Content: "Weather in Sydney?"}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -642,13 +642,13 @@ func TestChat_NativeFormat_ToolCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "Weather in Sydney?"}},
+		Messages: []talk.Message{{Role: "user", Content: "Weather in Sydney?"}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -680,13 +680,13 @@ func TestChat_NativeFormat_MultipleToolCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "Weather in Sydney and Melbourne?"}},
+		Messages: []talk.Message{{Role: "user", Content: "Weather in Sydney and Melbourne?"}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -712,13 +712,13 @@ func TestChat_NativeFormat_ContentOnly(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -747,13 +747,13 @@ func TestChat_ToolCallInCodeFence_Fallback(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "search for test"}},
+		Messages: []talk.Message{{Role: "user", Content: "search for test"}},
 	}
 
-	var got loop.Response
-	client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})

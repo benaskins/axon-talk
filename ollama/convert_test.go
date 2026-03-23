@@ -8,13 +8,13 @@ import (
 	"net/url"
 	"testing"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 	ollamaapi "github.com/ollama/ollama/api"
 )
 
 func TestToMessages_Basic(t *testing.T) {
-	msgs := []loop.Message{
+	msgs := []talk.Message{
 		{Role: "user", Content: "hello"},
 		{Role: "assistant", Content: "hi there"},
 	}
@@ -33,7 +33,7 @@ func TestToMessages_Basic(t *testing.T) {
 }
 
 func TestToMessages_WithThinking(t *testing.T) {
-	msgs := []loop.Message{
+	msgs := []talk.Message{
 		{Role: "assistant", Content: "answer", Thinking: "let me think"},
 	}
 
@@ -45,10 +45,10 @@ func TestToMessages_WithThinking(t *testing.T) {
 }
 
 func TestToMessages_WithToolCalls(t *testing.T) {
-	msgs := []loop.Message{
+	msgs := []talk.Message{
 		{
 			Role: "assistant",
-			ToolCalls: []loop.ToolCall{
+			ToolCalls: []talk.ToolCall{
 				{Name: "get_weather", Arguments: map[string]any{"city": "Sydney"}},
 			},
 		},
@@ -77,7 +77,7 @@ func TestToMessages_Empty(t *testing.T) {
 }
 
 func TestToToolCalls(t *testing.T) {
-	calls := []loop.ToolCall{
+	calls := []talk.ToolCall{
 		{Name: "search", Arguments: map[string]any{"query": "test", "limit": float64(10)}},
 		{Name: "noop", Arguments: map[string]any{}},
 	}
@@ -229,14 +229,14 @@ func TestChat_StreamsResponses(t *testing.T) {
 	api := ollamaapi.NewClient(base, server.Client())
 	client := NewClient(api)
 
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "llama3",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Stream:   true,
 	}
 
-	var responses []loop.Response
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var responses []talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		responses = append(responses, resp)
 		return nil
 	})
@@ -273,13 +273,13 @@ func TestChat_WithOptions(t *testing.T) {
 	base, _ := url.Parse(server.URL)
 	client := NewClient(ollamaapi.NewClient(base, server.Client()))
 
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "llama3",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Options:  map[string]any{"temperature": float64(0)},
 	}
 
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 	if err != nil {
 		t.Fatalf("Chat error: %v", err)
 	}
@@ -310,13 +310,13 @@ func TestChat_WithThinkFlag(t *testing.T) {
 	client := NewClient(ollamaapi.NewClient(base, server.Client()))
 
 	think := true
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "llama3",
-		Messages: []loop.Message{{Role: "user", Content: "think about this"}},
+		Messages: []talk.Message{{Role: "user", Content: "think about this"}},
 		Think:    &think,
 	}
 
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 	if err != nil {
 		t.Fatalf("Chat error: %v", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 )
 
 func TestLive_StreamingDirect(t *testing.T) {
@@ -16,9 +16,9 @@ func TestLive_StreamingDirect(t *testing.T) {
 
 	client := NewClient("https://api.anthropic.com", apiKey)
 
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "claude-sonnet-4-6",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "system", Content: "Reply in exactly 3 words."},
 			{Role: "user", Content: "Hello"},
 		},
@@ -28,7 +28,7 @@ func TestLive_StreamingDirect(t *testing.T) {
 
 	var content string
 	var gotDone bool
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		content += resp.Content
 		if resp.Done {
 			gotDone = true
@@ -59,9 +59,9 @@ func TestLive_StreamingViaGateway(t *testing.T) {
 	baseURL := "https://gateway.ai.cloudflare.com/v1/" + accountID + "/axon-gate/anthropic"
 	client := NewClient(baseURL, apiKey, WithGatewayToken(gwToken))
 
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "claude-sonnet-4-6",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "system", Content: "Reply in exactly 3 words."},
 			{Role: "user", Content: "Hello"},
 		},
@@ -71,7 +71,7 @@ func TestLive_StreamingViaGateway(t *testing.T) {
 
 	var content string
 	var gotDone bool
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		content += resp.Content
 		if resp.Done {
 			gotDone = true

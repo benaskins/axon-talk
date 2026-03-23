@@ -1,15 +1,15 @@
-// Package ollama provides a loop.LLMClient implementation for Ollama.
+// Package ollama provides a talk.LLMClient implementation for Ollama.
 package ollama
 
 import (
 	"context"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 	ollamaapi "github.com/ollama/ollama/api"
 )
 
-// Client implements loop.LLMClient by translating to/from the Ollama API.
+// Client implements talk.LLMClient by translating to/from the Ollama API.
 type Client struct {
 	api *ollamaapi.Client
 }
@@ -29,7 +29,7 @@ func NewClientFromEnvironment() (*Client, error) {
 }
 
 // Chat sends a request to Ollama and streams responses back through fn.
-func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
+func (c *Client) Chat(ctx context.Context, req *talk.Request, fn func(talk.Response) error) error {
 	ollamaReq := &ollamaapi.ChatRequest{
 		Model:    req.Model,
 		Messages: toMessages(req.Messages),
@@ -60,7 +60,7 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 	})
 }
 
-func toMessages(msgs []loop.Message) []ollamaapi.Message {
+func toMessages(msgs []talk.Message) []ollamaapi.Message {
 	out := make([]ollamaapi.Message, len(msgs))
 	for i, m := range msgs {
 		out[i] = ollamaapi.Message{
@@ -75,7 +75,7 @@ func toMessages(msgs []loop.Message) []ollamaapi.Message {
 	return out
 }
 
-func toToolCalls(calls []loop.ToolCall) []ollamaapi.ToolCall {
+func toToolCalls(calls []talk.ToolCall) []ollamaapi.ToolCall {
 	out := make([]ollamaapi.ToolCall, len(calls))
 	for i, tc := range calls {
 		args := ollamaapi.NewToolCallFunctionArguments()
@@ -118,16 +118,16 @@ func toTools(defs []tool.ToolDef) ollamaapi.Tools {
 	return out
 }
 
-func fromResponse(resp ollamaapi.ChatResponse) loop.Response {
-	r := loop.Response{
+func fromResponse(resp ollamaapi.ChatResponse) talk.Response {
+	r := talk.Response{
 		Content:  resp.Message.Content,
 		Thinking: resp.Message.Thinking,
 		Done:     resp.Done,
 	}
 	if len(resp.Message.ToolCalls) > 0 {
-		r.ToolCalls = make([]loop.ToolCall, len(resp.Message.ToolCalls))
+		r.ToolCalls = make([]talk.ToolCall, len(resp.Message.ToolCalls))
 		for i, tc := range resp.Message.ToolCalls {
-			r.ToolCalls[i] = loop.ToolCall{
+			r.ToolCalls[i] = talk.ToolCall{
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments.ToMap(),
 			}

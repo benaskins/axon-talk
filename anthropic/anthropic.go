@@ -1,4 +1,4 @@
-// Package anthropic provides a loop.LLMClient implementation for the
+// Package anthropic provides a talk.LLMClient implementation for the
 // Anthropic Messages API. It supports model selection (Opus, Sonnet, Haiku)
 // via the standard req.Model field. Works directly against api.anthropic.com
 // or through a gateway such as Cloudflare AI Gateway.
@@ -14,11 +14,11 @@ import (
 	"net/http"
 	"strings"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
 
-// Client implements loop.LLMClient for the Anthropic Messages API.
+// Client implements talk.LLMClient for the Anthropic Messages API.
 type Client struct {
 	baseURL      string
 	apiKey       string
@@ -64,7 +64,7 @@ func NewClient(baseURL, apiKey string, opts ...Option) *Client {
 // Chat sends a request to the Anthropic Messages API and delivers the
 // response through fn. When req.Stream is true, the response is streamed
 // via SSE with incremental token delivery.
-func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
+func (c *Client) Chat(ctx context.Context, req *talk.Request, fn func(talk.Response) error) error {
 	body := c.buildRequest(req)
 
 	jsonBody, err := json.Marshal(body)
@@ -103,7 +103,7 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 	return c.handleFull(httpResp.Body, fn)
 }
 
-func (c *Client) handleFull(body io.Reader, fn func(loop.Response) error) error {
+func (c *Client) handleFull(body io.Reader, fn func(talk.Response) error) error {
 	respBody, err := io.ReadAll(body)
 	if err != nil {
 		return fmt.Errorf("anthropic: read response: %w", err)
@@ -117,7 +117,7 @@ func (c *Client) handleFull(body io.Reader, fn func(loop.Response) error) error 
 	return fn(fromResponse(apiResp))
 }
 
-func (c *Client) handleStream(body io.Reader, fn func(loop.Response) error) error {
+func (c *Client) handleStream(body io.Reader, fn func(talk.Response) error) error {
 	scanner := bufio.NewScanner(body)
 
 	// Accumulate tool use blocks being built across events.
@@ -164,7 +164,7 @@ func (c *Client) handleStream(body io.Reader, fn func(loop.Response) error) erro
 				}
 				switch ev.Delta.Type {
 				case "text_delta":
-					if err := fn(loop.Response{Content: ev.Delta.Text}); err != nil {
+					if err := fn(talk.Response{Content: ev.Delta.Text}); err != nil {
 						return err
 					}
 				case "input_json_delta":
@@ -175,18 +175,18 @@ func (c *Client) handleStream(body io.Reader, fn func(loop.Response) error) erro
 
 			case "message_delta":
 				// Final event — assemble tool calls and signal done.
-				var toolCalls []loop.ToolCall
+				var toolCalls []talk.ToolCall
 				for _, p := range pending {
 					var args map[string]any
 					if p.args.Len() > 0 {
 						json.Unmarshal([]byte(p.args.String()), &args)
 					}
-					toolCalls = append(toolCalls, loop.ToolCall{
+					toolCalls = append(toolCalls, talk.ToolCall{
 						Name:      p.name,
 						Arguments: args,
 					})
 				}
-				if err := fn(loop.Response{Done: true, ToolCalls: toolCalls}); err != nil {
+				if err := fn(talk.Response{Done: true, ToolCalls: toolCalls}); err != nil {
 					return err
 				}
 
@@ -202,7 +202,7 @@ func (c *Client) handleStream(body io.Reader, fn func(loop.Response) error) erro
 	return scanner.Err()
 }
 
-func (c *Client) buildRequest(req *loop.Request) messagesRequest {
+func (c *Client) buildRequest(req *talk.Request) messagesRequest {
 	msgs, system := toMessages(req.Messages)
 
 	// Anthropic API requires at least one message in the messages array.
@@ -249,9 +249,9 @@ func (c *Client) buildRequest(req *loop.Request) messagesRequest {
 	return mr
 }
 
-// toMessages converts loop.Messages to Anthropic message format,
+// toMessages converts talk.Messages to Anthropic message format,
 // extracting system messages into the separate system parameter.
-func toMessages(msgs []loop.Message) ([]message, []systemBlock) {
+func toMessages(msgs []talk.Message) ([]message, []systemBlock) {
 	var out []message
 	var system []systemBlock
 
@@ -399,23 +399,23 @@ func toPropertyDef(prop tool.PropertySchema) propertyDef {
 	return pd
 }
 
-func fromResponse(resp messagesResponse) loop.Response {
+func fromResponse(resp messagesResponse) talk.Response {
 	var content strings.Builder
-	var toolCalls []loop.ToolCall
+	var toolCalls []talk.ToolCall
 
 	for _, block := range resp.Content {
 		switch block.Type {
 		case "text":
 			content.WriteString(block.Text)
 		case "tool_use":
-			toolCalls = append(toolCalls, loop.ToolCall{
+			toolCalls = append(toolCalls, talk.ToolCall{
 				Name:      block.Name,
 				Arguments: block.Input,
 			})
 		}
 	}
 
-	return loop.Response{
+	return talk.Response{
 		Content:   content.String(),
 		ToolCalls: toolCalls,
 		Done:      true,

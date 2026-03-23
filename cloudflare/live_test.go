@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 )
 
 func TestLive_BasicInference(t *testing.T) {
@@ -19,14 +19,14 @@ func TestLive_BasicInference(t *testing.T) {
 	client := NewClient(baseURL, token)
 
 	think := false
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "@cf/qwen/qwen3-30b-a3b-fp8",
-		Messages: []loop.Message{{Role: "user", Content: "What is 2+2? Reply with just the number."}},
+		Messages: []talk.Message{{Role: "user", Content: "What is 2+2? Reply with just the number."}},
 		Think:    &think,
 	}
 
-	var got loop.Response
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
@@ -53,12 +53,12 @@ func TestLive_ToolResultConversation(t *testing.T) {
 	client := NewClient(baseURL, token)
 
 	think := false
-	req := &loop.Request{
+	req := &talk.Request{
 		Model: "@cf/qwen/qwen3-30b-a3b-fp8",
-		Messages: []loop.Message{
+		Messages: []talk.Message{
 			{Role: "system", Content: "You are a helpful assistant. Ask one question at a time."},
 			{Role: "user", Content: "What's the weather in Sydney?"},
-			{Role: "assistant", ToolCalls: []loop.ToolCall{
+			{Role: "assistant", ToolCalls: []talk.ToolCall{
 				{Name: "get_weather", Arguments: map[string]any{"city": "Sydney"}},
 			}},
 			{Role: "tool", Content: "Sydney: 22°C, sunny, light breeze"},
@@ -67,8 +67,8 @@ func TestLive_ToolResultConversation(t *testing.T) {
 		Options: map[string]any{"max_tokens": 200},
 	}
 
-	var got loop.Response
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})

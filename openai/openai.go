@@ -1,4 +1,4 @@
-// Package openai provides a loop.LLMClient implementation for any
+// Package openai provides a talk.LLMClient implementation for any
 // OpenAI-compatible chat completions API. It works with OpenAI, Azure
 // OpenAI, Gemini, Grok, Groq, Together, Fireworks, and any other
 // provider that speaks the /v1/chat/completions protocol.
@@ -14,11 +14,11 @@ import (
 	"strings"
 
 	"github.com/benaskins/axon/stream"
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
 
-// Client implements loop.LLMClient for OpenAI-compatible APIs.
+// Client implements talk.LLMClient for OpenAI-compatible APIs.
 type Client struct {
 	baseURL      string
 	token        string
@@ -61,7 +61,7 @@ func NewClient(baseURL, token string, opts ...Option) *Client {
 // Chat sends a request to the chat completions endpoint and delivers
 // the response through fn. When req.Stream is true, the response is
 // streamed via SSE with incremental token delivery.
-func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
+func (c *Client) Chat(ctx context.Context, req *talk.Request, fn func(talk.Response) error) error {
 	body := buildRequest(req)
 
 	jsonBody, err := json.Marshal(body)
@@ -92,7 +92,7 @@ func (c *Client) Chat(ctx context.Context, req *loop.Request, fn func(loop.Respo
 	return c.handleFull(httpResp, req.Tools, fn)
 }
 
-func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn func(loop.Response) error) error {
+func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn func(talk.Response) error) error {
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return fmt.Errorf("openai: read response: %w", err)
@@ -112,7 +112,7 @@ func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn fu
 	return fn(resp)
 }
 
-func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn func(loop.Response) error) error {
+func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn func(talk.Response) error) error {
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
 		return fmt.Errorf("openai: status %d: %s", httpResp.StatusCode, respBody)
@@ -127,20 +127,20 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 
 	err := parseSSE(httpResp.Body, func(ev sseEvent) error {
 		if ev.Done {
-			var toolCalls []loop.ToolCall
+			var toolCalls []talk.ToolCall
 			for i := 0; i < len(pending); i++ {
 				tc := pending[i]
 				var args map[string]any
 				if tc.args.Len() > 0 {
 					json.Unmarshal([]byte(tc.args.String()), &args)
 				}
-				toolCalls = append(toolCalls, loop.ToolCall{
+				toolCalls = append(toolCalls, talk.ToolCall{
 					Name:      tc.name,
 					Arguments: args,
 				})
 			}
 
-			resp := loop.Response{Done: true, ToolCalls: toolCalls}
+			resp := talk.Response{Done: true, ToolCalls: toolCalls}
 			normalizeToolCallArgs(&resp, tools)
 			return fn(resp)
 		}
@@ -160,14 +160,14 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 
 		// Emit content tokens directly.
 		if ev.Delta.Content != "" {
-			if err := fn(loop.Response{Content: ev.Delta.Content}); err != nil {
+			if err := fn(talk.Response{Content: ev.Delta.Content}); err != nil {
 				return err
 			}
 		}
 
 		// Emit thinking tokens directly.
 		if ev.Delta.ReasoningContent != "" {
-			if err := fn(loop.Response{Thinking: ev.Delta.ReasoningContent}); err != nil {
+			if err := fn(talk.Response{Thinking: ev.Delta.ReasoningContent}); err != nil {
 				return err
 			}
 		}
@@ -178,7 +178,7 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 	return err
 }
 
-func buildRequest(req *loop.Request) chatRequest {
+func buildRequest(req *talk.Request) chatRequest {
 	cr := chatRequest{
 		Model:    req.Model,
 		Messages: toMessages(req.Messages),
@@ -208,7 +208,7 @@ func buildRequest(req *loop.Request) chatRequest {
 	return cr
 }
 
-func toMessages(msgs []loop.Message) []message {
+func toMessages(msgs []talk.Message) []message {
 	out := make([]message, 0, len(msgs))
 	// Track pending tool call IDs so we can match tool results.
 	var pendingCallIDs []string
@@ -238,7 +238,7 @@ func toMessages(msgs []loop.Message) []message {
 	return out
 }
 
-func toRequestToolCalls(calls []loop.ToolCall) []requestToolCall {
+func toRequestToolCalls(calls []talk.ToolCall) []requestToolCall {
 	out := make([]requestToolCall, len(calls))
 	for i, tc := range calls {
 		args, _ := json.Marshal(tc.Arguments)
@@ -300,24 +300,24 @@ func toPropertyDef(prop tool.PropertySchema) propertyDef {
 	return pd
 }
 
-func fromResponse(completion chatCompletion) loop.Response {
+func fromResponse(completion chatCompletion) talk.Response {
 	if len(completion.Choices) == 0 {
-		return loop.Response{Done: true}
+		return talk.Response{Done: true}
 	}
 
 	choice := completion.Choices[0]
-	resp := loop.Response{
+	resp := talk.Response{
 		Content:  strings.TrimLeft(choice.Message.Content, "\n"),
 		Thinking: strings.TrimSpace(choice.Message.ReasoningContent),
 		Done:     true,
 	}
 
 	if len(choice.Message.ToolCalls) > 0 {
-		resp.ToolCalls = make([]loop.ToolCall, len(choice.Message.ToolCalls))
+		resp.ToolCalls = make([]talk.ToolCall, len(choice.Message.ToolCalls))
 		for i, tc := range choice.Message.ToolCalls {
 			var args map[string]any
 			json.Unmarshal([]byte(tc.Function.Arguments), &args)
-			resp.ToolCalls[i] = loop.ToolCall{
+			resp.ToolCalls[i] = talk.ToolCall{
 				Name:      tc.Function.Name,
 				Arguments: args,
 			}
@@ -329,7 +329,7 @@ func fromResponse(completion chatCompletion) loop.Response {
 
 // normalizeToolCallArgs coerces tool call argument types to match the
 // JSON Schema types declared in each tool's parameter schema.
-func normalizeToolCallArgs(resp *loop.Response, tools []tool.ToolDef) {
+func normalizeToolCallArgs(resp *talk.Response, tools []tool.ToolDef) {
 	if len(resp.ToolCalls) == 0 || len(tools) == 0 {
 		return
 	}

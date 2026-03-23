@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
 
@@ -42,16 +42,16 @@ data: {"type":"message_stop"}`,
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Stream:   true,
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
 	var tokens []string
 	var done bool
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		if resp.Content != "" {
 			tokens = append(tokens, resp.Content)
 		}
@@ -103,9 +103,9 @@ data: {"type":"message_stop"}`,
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "Weather?"}},
+		Messages: []talk.Message{{Role: "user", Content: "Weather?"}},
 		Stream:   true,
 		Tools: []tool.ToolDef{{
 			Name: "get_weather",
@@ -120,8 +120,8 @@ data: {"type":"message_stop"}`,
 		Options: map[string]any{"max_tokens": 1024},
 	}
 
-	var toolCalls []loop.ToolCall
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var toolCalls []talk.ToolCall
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		if len(resp.ToolCalls) > 0 {
 			toolCalls = resp.ToolCalls
 		}
@@ -153,14 +153,14 @@ func TestChat_StreamError(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Stream:   true,
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 	if err == nil {
 		t.Fatal("expected error for stream error event")
 	}
@@ -203,16 +203,16 @@ data: {"type":"message_stop"}`,
 	defer server.Close()
 
 	client := NewClient(server.URL, "key")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "claude-opus-4-6",
-		Messages: []loop.Message{{Role: "user", Content: "search test"}},
+		Messages: []talk.Message{{Role: "user", Content: "search test"}},
 		Stream:   true,
 		Options:  map[string]any{"max_tokens": 1024},
 	}
 
 	var content string
-	var toolCalls []loop.ToolCall
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var toolCalls []talk.ToolCall
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		content += resp.Content
 		if len(resp.ToolCalls) > 0 {
 			toolCalls = resp.ToolCalls

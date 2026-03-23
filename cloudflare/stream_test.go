@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	loop "github.com/benaskins/axon-loop"
+	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
 
@@ -31,15 +31,15 @@ func TestChat_StreamContentTokens(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Stream:   true,
 	}
 
 	var tokens []string
 	var gotDone bool
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		if resp.Content != "" {
 			tokens = append(tokens, resp.Content)
 		}
@@ -69,14 +69,14 @@ func TestChat_StreamThinking(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Stream:   true,
 	}
 
 	var thinking, content []string
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		if resp.Thinking != "" {
 			thinking = append(thinking, resp.Thinking)
 		}
@@ -106,9 +106,9 @@ func TestChat_StreamStructuredToolCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "weather?"}},
+		Messages: []talk.Message{{Role: "user", Content: "weather?"}},
 		Stream:   true,
 		Tools: []tool.ToolDef{{
 			Name: "get_weather",
@@ -121,8 +121,8 @@ func TestChat_StreamStructuredToolCalls(t *testing.T) {
 		}},
 	}
 
-	var responses []loop.Response
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var responses []talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		responses = append(responses, resp)
 		return nil
 	})
@@ -131,7 +131,7 @@ func TestChat_StreamStructuredToolCalls(t *testing.T) {
 	}
 
 	// Tool calls should arrive in the done response
-	var toolCalls []loop.ToolCall
+	var toolCalls []talk.ToolCall
 	for _, r := range responses {
 		toolCalls = append(toolCalls, r.ToolCalls...)
 	}
@@ -157,14 +157,14 @@ func TestChat_StreamMultipleToolCalls(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "search"}},
+		Messages: []talk.Message{{Role: "user", Content: "search"}},
 		Stream:   true,
 	}
 
-	var toolCalls []loop.ToolCall
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var toolCalls []talk.ToolCall
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		toolCalls = append(toolCalls, resp.ToolCalls...)
 		return nil
 	})
@@ -193,13 +193,13 @@ func TestChat_StreamSetsStreamInRequest(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Stream:   true,
 	}
 
-	client.Chat(context.Background(), req, func(resp loop.Response) error { return nil })
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
 	if gotBody.Stream == nil || !*gotBody.Stream {
 		t.Error("stream should be true in request body")
@@ -214,9 +214,9 @@ func TestChat_StreamNormalizesToolCallArgs(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "set temp"}},
+		Messages: []talk.Message{{Role: "user", Content: "set temp"}},
 		Stream:   true,
 		Tools: []tool.ToolDef{{
 			Name: "set_temp",
@@ -229,8 +229,8 @@ func TestChat_StreamNormalizesToolCallArgs(t *testing.T) {
 		}},
 	}
 
-	var toolCalls []loop.ToolCall
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var toolCalls []talk.ToolCall
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		toolCalls = append(toolCalls, resp.ToolCalls...)
 		return nil
 	})
@@ -257,15 +257,15 @@ func TestChat_StreamToolCallInContent(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "weather?"}},
+		Messages: []talk.Message{{Role: "user", Content: "weather?"}},
 		Stream:   true,
 	}
 
-	var toolCalls []loop.ToolCall
+	var toolCalls []talk.ToolCall
 	var contentTokens []string
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		if resp.Content != "" {
 			contentTokens = append(contentTokens, resp.Content)
 		}
@@ -301,14 +301,14 @@ func TestChat_StreamToolCallInCodeFence(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "search"}},
+		Messages: []talk.Message{{Role: "user", Content: "search"}},
 		Stream:   true,
 	}
 
-	var toolCalls []loop.ToolCall
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var toolCalls []talk.ToolCall
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		toolCalls = append(toolCalls, resp.ToolCalls...)
 		return nil
 	})
@@ -334,14 +334,14 @@ func TestChat_StreamNormalContentNotHeld(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Stream:   true,
 	}
 
 	var tokens []string
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		if resp.Content != "" {
 			tokens = append(tokens, resp.Content)
 		}
@@ -371,14 +371,14 @@ func TestChat_NonStreamingStillWorks(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "token")
-	req := &loop.Request{
+	req := &talk.Request{
 		Model:    "model",
-		Messages: []loop.Message{{Role: "user", Content: "hi"}},
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
 		Stream:   false,
 	}
 
-	var got loop.Response
-	err := client.Chat(context.Background(), req, func(resp loop.Response) error {
+	var got talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
 		got = resp
 		return nil
 	})
