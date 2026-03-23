@@ -76,6 +76,18 @@ func (e *StatusError) Error() string {
 // RequestOption configures a Request.
 type RequestOption func(*Request)
 
+// WithStructuredOutput returns a RequestOption that requests the LLM to
+// respond with JSON conforming to the given schema. Each adapter translates
+// this to its provider-specific wire format.
+func WithStructuredOutput(schema map[string]any) RequestOption {
+	return func(r *Request) {
+		if r.Options == nil {
+			r.Options = map[string]any{}
+		}
+		r.Options["structured_output"] = schema
+	}
+}
+
 // NewRequest creates a Request with the given model, messages, and options.
 func NewRequest(model string, messages []Message, opts ...RequestOption) *Request {
 	r := &Request{

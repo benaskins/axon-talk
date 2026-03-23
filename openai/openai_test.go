@@ -478,6 +478,50 @@ func TestChat_NoGatewayToken(t *testing.T) {
 	}
 }
 
+func TestChat_StructuredOutput(t *testing.T) {
+	var gotBody chatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: `{"name":"Alice","age":30}`}}},
+		})
+	}))
+	defer server.Close()
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string"},
+			"age":  map[string]any{"type": "number"},
+		},
+		"required": []any{"name"},
+	}
+
+	client := NewClient(server.URL, "token")
+	req := talk.NewRequest("gpt-4o",
+		[]talk.Message{{Role: "user", Content: "Who is Alice?"}},
+		talk.WithStructuredOutput(schema),
+	)
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	if gotBody.ResponseFormat == nil {
+		t.Fatal("response_format should be set")
+	}
+	if gotBody.ResponseFormat.Type != "json_schema" {
+		t.Errorf("type = %q, want json_schema", gotBody.ResponseFormat.Type)
+	}
+	if gotBody.ResponseFormat.JSONSchema == nil {
+		t.Fatal("json_schema should be set")
+	}
+	if !gotBody.ResponseFormat.JSONSchema.Strict {
+		t.Error("strict should be true")
+	}
+	if gotBody.ResponseFormat.JSONSchema.Schema["type"] != "object" {
+		t.Errorf("schema type = %v", gotBody.ResponseFormat.JSONSchema.Schema["type"])
+	}
+}
+
 func TestChat_MaxTokensFromOptions(t *testing.T) {
 	var gotBody chatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

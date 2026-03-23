@@ -3,6 +3,7 @@ package ollama
 
 import (
 	"context"
+	"encoding/json"
 
 	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
@@ -41,7 +42,12 @@ func (c *Client) Chat(ctx context.Context, req *talk.Request, fn func(talk.Respo
 	}
 
 	if req.Options != nil {
-		ollamaReq.Options = req.Options
+		ollamaReq.Options = filterOllamaOptions(req.Options)
+	}
+
+	if schema, ok := req.Options["structured_output"].(map[string]any); ok {
+		b, _ := json.Marshal(schema)
+		ollamaReq.Format = json.RawMessage(b)
 	}
 
 	if req.Think != nil {
@@ -114,6 +120,19 @@ func toTools(defs []tool.ToolDef) ollamaapi.Tools {
 				},
 			},
 		}
+	}
+	return out
+}
+
+// filterOllamaOptions returns a copy of opts without axon-talk internal keys.
+func filterOllamaOptions(opts map[string]any) map[string]any {
+	out := make(map[string]any, len(opts))
+	for k, v := range opts {
+		switch k {
+		case "structured_output", "anthropic_prompt_caching":
+			continue
+		}
+		out[k] = v
 	}
 	return out
 }

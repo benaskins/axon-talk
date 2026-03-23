@@ -67,6 +67,27 @@ func TestStatusError_WrappedInFmt(t *testing.T) {
 	}
 }
 
+func TestWithStructuredOutput(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string"},
+			"age":  map[string]any{"type": "number"},
+		},
+		"required": []any{"name"},
+	}
+
+	req := NewRequest("model-1", nil, WithStructuredOutput(schema))
+
+	got, ok := req.Options["structured_output"].(map[string]any)
+	if !ok {
+		t.Fatal("structured_output not set")
+	}
+	if got["type"] != "object" {
+		t.Errorf("type = %v, want object", got["type"])
+	}
+}
+
 func TestRoleConstants(t *testing.T) {
 	if RoleSystem != "system" {
 		t.Errorf("RoleSystem = %q", RoleSystem)

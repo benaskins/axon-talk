@@ -205,6 +205,17 @@ func buildRequest(req *talk.Request) chatRequest {
 		cr.Stream = &s
 	}
 
+	if schema, ok := req.Options["structured_output"].(map[string]any); ok {
+		cr.ResponseFormat = &responseFormat{
+			Type: "json_schema",
+			JSONSchema: &jsonSchemaFormat{
+				Name:   "response",
+				Schema: schema,
+				Strict: true,
+			},
+		}
+	}
+
 	return cr
 }
 
@@ -353,12 +364,24 @@ func normalizeToolCallArgs(resp *talk.Response, tools []tool.ToolDef) {
 // Wire types for the OpenAI chat completions API.
 
 type chatRequest struct {
-	Model       string    `json:"model"`
-	Messages    []message `json:"messages"`
-	MaxTokens   int       `json:"max_tokens,omitempty"`
-	Temperature *float64  `json:"temperature,omitempty"`
-	Tools       []toolDef `json:"tools,omitempty"`
-	Stream      *bool     `json:"stream,omitempty"`
+	Model          string          `json:"model"`
+	Messages       []message       `json:"messages"`
+	MaxTokens      int             `json:"max_tokens,omitempty"`
+	Temperature    *float64        `json:"temperature,omitempty"`
+	Tools          []toolDef       `json:"tools,omitempty"`
+	Stream         *bool           `json:"stream,omitempty"`
+	ResponseFormat *responseFormat `json:"response_format,omitempty"`
+}
+
+type responseFormat struct {
+	Type       string            `json:"type"`
+	JSONSchema *jsonSchemaFormat  `json:"json_schema,omitempty"`
+}
+
+type jsonSchemaFormat struct {
+	Name   string         `json:"name"`
+	Schema map[string]any `json:"schema"`
+	Strict bool           `json:"strict"`
 }
 
 type message struct {

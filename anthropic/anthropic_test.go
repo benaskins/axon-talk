@@ -699,6 +699,63 @@ func TestChat_PromptCaching_Tools(t *testing.T) {
 	}
 }
 
+func TestChat_StructuredOutput(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content: []contentBlock{{
+				Type:  "tool_use",
+				ID:    "toolu_01",
+				Name:  "structured_response",
+				Input: map[string]any{"name": "Alice", "age": float64(30)},
+			}},
+			StopReason: "tool_use",
+		})
+	}))
+	defer server.Close()
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string"},
+			"age":  map[string]any{"type": "number"},
+		},
+		"required": []any{"name"},
+	}
+
+	client := NewClient(server.URL, "key")
+	req := talk.NewRequest("claude-sonnet-4-6",
+		[]talk.Message{{Role: "user", Content: "Who is Alice?"}},
+		talk.WithStructuredOutput(schema),
+	)
+	req.Options["max_tokens"] = 1024
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	// Should have tool_choice forcing structured_response
+	tc, ok := gotBody["tool_choice"].(map[string]any)
+	if !ok {
+		t.Fatal("expected tool_choice")
+	}
+	if tc["type"] != "tool" {
+		t.Errorf("tool_choice type = %v, want tool", tc["type"])
+	}
+	if tc["name"] != "structured_response" {
+		t.Errorf("tool_choice name = %v, want structured_response", tc["name"])
+	}
+
+	// Should have the structured_response tool in tools
+	tools, ok := gotBody["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		t.Fatal("expected tools")
+	}
+	lastTool := tools[len(tools)-1].(map[string]any)
+	if lastTool["name"] != "structured_response" {
+		t.Errorf("last tool name = %v, want structured_response", lastTool["name"])
+	}
+}
+
 func TestChat_NoCaching_NoCacheControl(t *testing.T) {
 	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -259,6 +259,23 @@ func (c *Client) buildRequest(req *talk.Request) messagesRequest {
 		mr.Stream = true
 	}
 
+	// Apply structured output via constrained tool use.
+	if schema, ok := req.Options["structured_output"].(map[string]any); ok {
+		mr.Tools = append(mr.Tools, toolDef{
+			Name:        "structured_response",
+			Description: "Respond with structured data matching the schema.",
+			InputSchema: inputSchema{
+				Type:       "object",
+				Properties: toPropertyDefsFromSchema(schema),
+				Required:   requiredFromSchema(schema),
+			},
+		})
+		mr.ToolChoice = &toolChoice{
+			Type: "tool",
+			Name: "structured_response",
+		}
+	}
+
 	// Apply prompt caching breakpoints.
 	if _, ok := req.Options["anthropic_prompt_caching"]; ok {
 		ephemeral := &cacheControl{Type: "ephemeral"}
@@ -423,6 +440,46 @@ func toPropertyDef(prop tool.PropertySchema) propertyDef {
 	return pd
 }
 
+// toPropertyDefsFromSchema converts a raw JSON schema's "properties" map to
+// anthropic propertyDef format.
+func toPropertyDefsFromSchema(schema map[string]any) map[string]propertyDef {
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]propertyDef, len(props))
+	for name, v := range props {
+		p, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		pd := propertyDef{}
+		if t, ok := p["type"].(string); ok {
+			pd.Type = t
+		}
+		if d, ok := p["description"].(string); ok {
+			pd.Description = d
+		}
+		out[name] = pd
+	}
+	return out
+}
+
+// requiredFromSchema extracts the "required" array from a JSON schema.
+func requiredFromSchema(schema map[string]any) []string {
+	req, ok := schema["required"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(req))
+	for _, v := range req {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func fromResponse(resp messagesResponse) talk.Response {
 	var content strings.Builder
 	var toolCalls []talk.ToolCall
@@ -455,7 +512,13 @@ type messagesRequest struct {
 	MaxTokens   int           `json:"max_tokens"`
 	Temperature *float64      `json:"temperature,omitempty"`
 	Tools       []toolDef     `json:"tools,omitempty"`
+	ToolChoice  *toolChoice   `json:"tool_choice,omitempty"`
 	Stream      bool          `json:"stream,omitempty"`
+}
+
+type toolChoice struct {
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
 }
 
 type cacheControl struct {
