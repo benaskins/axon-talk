@@ -94,7 +94,7 @@ func (c *Client) Chat(ctx context.Context, req *talk.Request, fn func(talk.Respo
 
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
-		return fmt.Errorf("anthropic: status %d: %s (url: %s)", httpResp.StatusCode, respBody, url)
+		return &talk.StatusError{StatusCode: httpResp.StatusCode, Body: string(respBody), Provider: "anthropic"}
 	}
 
 	if req.Stream {

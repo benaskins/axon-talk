@@ -2,6 +2,7 @@ package talk
 
 import (
 	"context"
+	"fmt"
 
 	tool "github.com/benaskins/axon-tool"
 )
@@ -57,6 +58,19 @@ type Response struct {
 // (e.g. Ollama, OpenAI, Anthropic).
 type LLMClient interface {
 	Chat(ctx context.Context, req *Request, fn func(Response) error) error
+}
+
+// StatusError is returned by adapters when the provider API responds with
+// a non-OK HTTP status. It carries the status code so callers (e.g. retry
+// middleware) can make decisions based on it.
+type StatusError struct {
+	StatusCode int
+	Body       string
+	Provider   string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("%s: status %d: %s", e.Provider, e.StatusCode, e.Body)
 }
 
 // RequestOption configures a Request.

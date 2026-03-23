@@ -1,6 +1,10 @@
 package talk
 
-import "testing"
+import (
+	"errors"
+	"fmt"
+	"testing"
+)
 
 func TestNewRequest(t *testing.T) {
 	msgs := []Message{{Role: RoleUser, Content: "hello"}}
@@ -30,6 +34,36 @@ func TestNewRequest_WithOptions(t *testing.T) {
 	}
 	if !req.Stream {
 		t.Error("stream should be true")
+	}
+}
+
+func TestStatusError(t *testing.T) {
+	err := &StatusError{StatusCode: 429, Body: "rate limited", Provider: "openai"}
+
+	if err.Error() != "openai: status 429: rate limited" {
+		t.Errorf("error = %q", err.Error())
+	}
+
+	// Should be unwrappable via errors.As
+	var target *StatusError
+	if !errors.As(err, &target) {
+		t.Fatal("errors.As should match *StatusError")
+	}
+	if target.StatusCode != 429 {
+		t.Errorf("status = %d, want 429", target.StatusCode)
+	}
+}
+
+func TestStatusError_WrappedInFmt(t *testing.T) {
+	inner := &StatusError{StatusCode: 503, Body: "unavailable", Provider: "anthropic"}
+	wrapped := fmt.Errorf("chat failed: %w", inner)
+
+	var target *StatusError
+	if !errors.As(wrapped, &target) {
+		t.Fatal("errors.As should unwrap through fmt.Errorf")
+	}
+	if target.StatusCode != 503 {
+		t.Errorf("status = %d, want 503", target.StatusCode)
 	}
 }
 

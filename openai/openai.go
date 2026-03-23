@@ -99,7 +99,7 @@ func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn fu
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("openai: status %d: %s", httpResp.StatusCode, respBody)
+		return &talk.StatusError{StatusCode: httpResp.StatusCode, Body: string(respBody), Provider: "openai"}
 	}
 
 	var completion chatCompletion
@@ -115,7 +115,7 @@ func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn fu
 func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn func(talk.Response) error) error {
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
-		return fmt.Errorf("openai: status %d: %s", httpResp.StatusCode, respBody)
+		return &talk.StatusError{StatusCode: httpResp.StatusCode, Body: string(respBody), Provider: "openai"}
 	}
 
 	// Accumulate structured tool calls by index.
