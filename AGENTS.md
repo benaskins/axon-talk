@@ -1,6 +1,6 @@
 # axon-talk
 
-LLM provider adapters for axon-loop. Each subpackage implements `loop.LLMClient` for a specific backend, translating axon-loop's provider-agnostic request/response types into native API calls.
+LLM provider adapters implementing a provider-agnostic interface. Each subpackage implements `talk.LLMClient` for a specific backend, translating axon-talk's provider-agnostic request/response types into native API calls.
 
 Import: `github.com/benaskins/axon-talk`
 
@@ -18,6 +18,7 @@ The `openai` package works with any provider that speaks the OpenAI `/v1/chat/co
 ## Key files
 
 - `doc.go` — package doc
+- `talk.go` — core types and interface definition
 - `ollama/ollama.go` — Ollama adapter
 - `anthropic/anthropic.go` — Anthropic adapter (with streaming, gateway token option)
 - `cloudflare/cloudflare.go` — Cloudflare Workers AI adapter
@@ -29,7 +30,6 @@ The `openai` package works with any provider that speaks the OpenAI `/v1/chat/co
 ## Dependencies
 
 - `axon` — HTTP utilities
-- `axon-loop` — `loop.LLMClient` interface, request/response types
 - `axon-tool` — tool definitions for function calling
 - `ollama/ollama` — Ollama Go client (ollama provider only)
 

@@ -2,9 +2,9 @@
 
 > Primitives · Part of the [lamina](https://github.com/benaskins/lamina-mono) workspace
 
-LLM provider adapters for [axon-loop](https://github.com/benaskins/axon-loop).
-Each subpackage implements `loop.LLMClient` for a specific backend, translating
-axon-loop's provider-agnostic request/response types into native API calls.
+LLM provider adapters implementing a provider-agnostic interface.
+Each subpackage implements `talk.LLMClient` for a specific backend, translating
+axon-talk's provider-agnostic request/response types into native API calls.
 
 ## Getting started
 
@@ -14,7 +14,7 @@ go get github.com/benaskins/axon-talk@latest
 
 ```go
 import (
-    loop "github.com/benaskins/axon-loop"
+    "github.com/benaskins/axon-talk"
     "github.com/benaskins/axon-talk/ollama"
 )
 
@@ -23,13 +23,18 @@ if err != nil {
     log.Fatal(err)
 }
 
-// client implements loop.LLMClient — pass it to loop.Run
-result, err := loop.Run(ctx, client, &loop.Request{
-    Model:    "llama3.2",
-    Messages: messages,
-    Stream:   true,
-}, nil, nil, loop.Callbacks{
-    OnToken: func(token string) { fmt.Print(token) },
+// client implements talk.LLMClient
+req := &talk.Request{
+    Model: "llama3.2",
+    Messages: []talk.Message{
+        {Role: talk.RoleUser, Content: "Say hello in one sentence."},
+    },
+    Stream: true,
+}
+
+err = client.Chat(ctx, req, func(resp talk.Response) error {
+    fmt.Print(resp.Content) // Print tokens as they arrive
+    return nil
 })
 ```
 
