@@ -35,9 +35,16 @@ result, err := loop.Run(ctx, client, &loop.Request{
 
 ## Providers
 
-| Package  | Backend                        | Constructor                          |
-|----------|--------------------------------|--------------------------------------|
-| `ollama` | [Ollama](https://ollama.com)   | `ollama.NewClientFromEnvironment()`  |
+| Package      | Backend                        | Constructor                          |
+|--------------|--------------------------------|--------------------------------------|
+| `ollama`     | [Ollama](https://ollama.com)   | `ollama.NewClientFromEnvironment()`  |
+| `anthropic`  | Anthropic Messages API         | `anthropic.NewClient(baseURL, key)`  |
+| `openai`     | OpenAI-compatible APIs         | `openai.NewClient(baseURL, token)`   |
+| `cloudflare` | Cloudflare Workers AI          | `cloudflare.NewClient(baseURL, token)` |
+
+The `openai` package works with any provider that speaks the OpenAI
+`/v1/chat/completions` protocol: OpenAI, Gemini, Grok, Groq, Together,
+Fireworks, Azure OpenAI, and others.
 
 ## License
 
