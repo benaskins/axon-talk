@@ -40,6 +40,19 @@ func WithGatewayToken(token string) Option {
 	return func(cl *Client) { cl.gatewayToken = token }
 }
 
+// WithPromptCaching returns a RequestOption that enables Anthropic prompt
+// caching. When set, cache_control breakpoints are added to the last system
+// block and the last tool definition, allowing the API to cache these
+// across requests.
+func WithPromptCaching() talk.RequestOption {
+	return func(r *talk.Request) {
+		if r.Options == nil {
+			r.Options = map[string]any{}
+		}
+		r.Options["anthropic_prompt_caching"] = true
+	}
+}
+
 // NewClient creates a Client that talks to the Anthropic Messages API.
 //
 // baseURL is the API root, e.g. "https://api.anthropic.com" for direct access,
@@ -246,6 +259,17 @@ func (c *Client) buildRequest(req *talk.Request) messagesRequest {
 		mr.Stream = true
 	}
 
+	// Apply prompt caching breakpoints.
+	if _, ok := req.Options["anthropic_prompt_caching"]; ok {
+		ephemeral := &cacheControl{Type: "ephemeral"}
+		if len(mr.System) > 0 {
+			mr.System[len(mr.System)-1].CacheControl = ephemeral
+		}
+		if len(mr.Tools) > 0 {
+			mr.Tools[len(mr.Tools)-1].CacheControl = ephemeral
+		}
+	}
+
 	return mr
 }
 
@@ -434,9 +458,14 @@ type messagesRequest struct {
 	Stream      bool          `json:"stream,omitempty"`
 }
 
-type systemBlock struct {
+type cacheControl struct {
 	Type string `json:"type"`
-	Text string `json:"text"`
+}
+
+type systemBlock struct {
+	Type         string        `json:"type"`
+	Text         string        `json:"text"`
+	CacheControl *cacheControl `json:"cache_control,omitempty"`
 }
 
 type message struct {
@@ -499,9 +528,10 @@ type messagesResponse struct {
 }
 
 type toolDef struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	InputSchema inputSchema `json:"input_schema"`
+	Name         string        `json:"name"`
+	Description  string        `json:"description,omitempty"`
+	InputSchema  inputSchema   `json:"input_schema"`
+	CacheControl *cacheControl `json:"cache_control,omitempty"`
 }
 
 type inputSchema struct {

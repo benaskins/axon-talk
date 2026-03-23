@@ -616,3 +616,115 @@ func TestChat_MultipleToolResultsInMessages(t *testing.T) {
 		t.Errorf("content[1] type = %q, want tool_result", toolResultMsg.Content[1].Type)
 	}
 }
+
+func TestChat_PromptCaching_SystemBlock(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "ok"}},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	req := talk.NewRequest("claude-sonnet-4-6",
+		[]talk.Message{
+			{Role: "system", Content: "You are helpful."},
+			{Role: "user", Content: "hi"},
+		},
+		WithPromptCaching(),
+	)
+	req.Options["max_tokens"] = 1024
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	// Check the last system block has cache_control
+	system, ok := gotBody["system"].([]any)
+	if !ok || len(system) == 0 {
+		t.Fatal("expected system blocks")
+	}
+	lastSystem := system[len(system)-1].(map[string]any)
+	cc, ok := lastSystem["cache_control"].(map[string]any)
+	if !ok {
+		t.Fatal("expected cache_control on last system block")
+	}
+	if cc["type"] != "ephemeral" {
+		t.Errorf("cache_control type = %v, want ephemeral", cc["type"])
+	}
+}
+
+func TestChat_PromptCaching_Tools(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "ok"}},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	req := talk.NewRequest("claude-sonnet-4-6",
+		[]talk.Message{{Role: "user", Content: "hi"}},
+		WithPromptCaching(),
+	)
+	req.Options["max_tokens"] = 1024
+	req.Tools = []tool.ToolDef{
+		{Name: "search", Description: "Search", Parameters: tool.ParameterSchema{Type: "object"}},
+		{Name: "fetch", Description: "Fetch", Parameters: tool.ParameterSchema{Type: "object"}},
+	}
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	// Check the last tool has cache_control
+	tools, ok := gotBody["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		t.Fatal("expected tools")
+	}
+	lastTool := tools[len(tools)-1].(map[string]any)
+	cc, ok := lastTool["cache_control"].(map[string]any)
+	if !ok {
+		t.Fatal("expected cache_control on last tool")
+	}
+	if cc["type"] != "ephemeral" {
+		t.Errorf("cache_control type = %v, want ephemeral", cc["type"])
+	}
+	// First tool should NOT have cache_control
+	firstTool := tools[0].(map[string]any)
+	if _, has := firstTool["cache_control"]; has {
+		t.Error("first tool should not have cache_control")
+	}
+}
+
+func TestChat_NoCaching_NoCacheControl(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "ok"}},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	req := &talk.Request{
+		Model: "claude-sonnet-4-6",
+		Messages: []talk.Message{
+			{Role: "system", Content: "You are helpful."},
+			{Role: "user", Content: "hi"},
+		},
+		Options: map[string]any{"max_tokens": 1024},
+	}
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	system := gotBody["system"].([]any)
+	lastSystem := system[len(system)-1].(map[string]any)
+	if _, has := lastSystem["cache_control"]; has {
+		t.Error("cache_control should not be present without WithPromptCaching")
+	}
+}
