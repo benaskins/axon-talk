@@ -12,6 +12,83 @@ import (
 	tool "github.com/benaskins/axon-tool"
 )
 
+func TestChat_StreamThinking(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+
+		events := []string{
+			`event: message_start
+data: {"type":"message_start","message":{"id":"msg_01","type":"message","role":"assistant","content":[],"model":"claude-opus-4-6","stop_reason":null}}`,
+			`event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me think"}}`,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" about this."}}`,
+			`event: content_block_stop
+data: {"type":"content_block_stop","index":0}`,
+			`event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"The answer is 4."}}`,
+			`event: content_block_stop
+data: {"type":"content_block_stop","index":1}`,
+			`event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
+			`event: message_stop
+data: {"type":"message_stop"}`,
+		}
+
+		for _, ev := range events {
+			fmt.Fprintf(w, "%s\n\n", ev)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	think := true
+	req := &talk.Request{
+		Model:    "claude-opus-4-6",
+		Messages: []talk.Message{{Role: "user", Content: "What is 2+2?"}},
+		Stream:   true,
+		Think:    &think,
+		Options:  map[string]any{"max_tokens": 16000},
+	}
+
+	var thinking []string
+	var content []string
+	var done bool
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
+		if resp.Thinking != "" {
+			thinking = append(thinking, resp.Thinking)
+		}
+		if resp.Content != "" {
+			content = append(content, resp.Content)
+		}
+		if resp.Done {
+			done = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+
+	joinedThinking := strings.Join(thinking, "")
+	if joinedThinking != "Let me think about this." {
+		t.Errorf("thinking = %q, want %q", joinedThinking, "Let me think about this.")
+	}
+	joinedContent := strings.Join(content, "")
+	if joinedContent != "The answer is 4." {
+		t.Errorf("content = %q, want %q", joinedContent, "The answer is 4.")
+	}
+	if !done {
+		t.Error("should receive done=true")
+	}
+}
+
 func TestChat_StreamBasic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

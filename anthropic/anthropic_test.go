@@ -756,6 +756,153 @@ func TestChat_StructuredOutput(t *testing.T) {
 	}
 }
 
+func TestChat_ThinkingResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content: []contentBlock{
+				{Type: "thinking", Thinking: "Let me reason through this."},
+				{Type: "text", Text: "The answer is 42."},
+			},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	think := true
+	req := &talk.Request{
+		Model:    "claude-opus-4-6",
+		Messages: []talk.Message{{Role: "user", Content: "What is the meaning of life?"}},
+		Think:    &think,
+		Options:  map[string]any{"max_tokens": 16000},
+	}
+
+	var got talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
+		got = resp
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+	if got.Thinking != "Let me reason through this." {
+		t.Errorf("thinking = %q, want %q", got.Thinking, "Let me reason through this.")
+	}
+	if got.Content != "The answer is 42." {
+		t.Errorf("content = %q, want %q", got.Content, "The answer is 42.")
+	}
+}
+
+func TestChat_ThinkingRequestParams(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "ok"}},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	think := true
+	req := &talk.Request{
+		Model:    "claude-opus-4-6",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Think:    &think,
+		Options:  map[string]any{"max_tokens": 16000, "temperature": 0.7},
+	}
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	// Should include thinking parameter
+	thinkingParam, ok := gotBody["thinking"].(map[string]any)
+	if !ok {
+		t.Fatal("expected thinking parameter in request")
+	}
+	if thinkingParam["type"] != "enabled" {
+		t.Errorf("thinking.type = %v, want enabled", thinkingParam["type"])
+	}
+	if thinkingParam["budget_tokens"] != float64(10000) {
+		t.Errorf("thinking.budget_tokens = %v, want 10000", thinkingParam["budget_tokens"])
+	}
+
+	// Temperature should be cleared when thinking is enabled
+	if _, has := gotBody["temperature"]; has {
+		t.Error("temperature should be cleared when thinking is enabled")
+	}
+}
+
+func TestChat_ThinkingCustomBudget(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "ok"}},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	think := true
+	req := &talk.Request{
+		Model:    "claude-opus-4-6",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Think:    &think,
+		Options:  map[string]any{"max_tokens": 32000, "thinking_budget": 20000},
+	}
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	thinkingParam, ok := gotBody["thinking"].(map[string]any)
+	if !ok {
+		t.Fatal("expected thinking parameter")
+	}
+	if thinkingParam["budget_tokens"] != float64(20000) {
+		t.Errorf("budget_tokens = %v, want 20000", thinkingParam["budget_tokens"])
+	}
+}
+
+func TestChat_ThinkingInMessages(t *testing.T) {
+	var gotBody messagesRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "ok"}},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	think := true
+	req := &talk.Request{
+		Model: "claude-opus-4-6",
+		Messages: []talk.Message{
+			{Role: "user", Content: "What is 2+2?"},
+			{Role: "assistant", Content: "4", Thinking: "Simple arithmetic."},
+			{Role: "user", Content: "And 3+3?"},
+		},
+		Think:   &think,
+		Options: map[string]any{"max_tokens": 16000},
+	}
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	// The assistant message should have two content blocks: thinking + text
+	assistantMsg := gotBody.Messages[1]
+	if len(assistantMsg.Content) != 2 {
+		t.Fatalf("assistant content blocks = %d, want 2", len(assistantMsg.Content))
+	}
+	if assistantMsg.Content[0].Type != "thinking" {
+		t.Errorf("content[0].type = %q, want thinking", assistantMsg.Content[0].Type)
+	}
+	if assistantMsg.Content[1].Type != "text" {
+		t.Errorf("content[1].type = %q, want text", assistantMsg.Content[1].Type)
+	}
+}
+
 func TestChat_NoCaching_NoCacheControl(t *testing.T) {
 	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

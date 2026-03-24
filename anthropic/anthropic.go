@@ -180,6 +180,10 @@ func (c *Client) handleStream(body io.Reader, fn func(talk.Response) error) erro
 					if err := fn(talk.Response{Content: ev.Delta.Text}); err != nil {
 						return err
 					}
+				case "thinking_delta":
+					if err := fn(talk.Response{Thinking: ev.Delta.Thinking}); err != nil {
+						return err
+					}
 				case "input_json_delta":
 					if len(pending) > 0 {
 						pending[len(pending)-1].args.WriteString(ev.Delta.PartialJSON)
@@ -249,6 +253,24 @@ func (c *Client) buildRequest(req *talk.Request) messagesRequest {
 		if t, ok := v.(float64); ok {
 			mr.Temperature = &t
 		}
+	}
+
+	if req.Think != nil && *req.Think {
+		budget := 10000
+		if v, ok := req.Options["thinking_budget"]; ok {
+			switch b := v.(type) {
+			case int:
+				budget = b
+			case float64:
+				budget = int(b)
+			}
+		}
+		mr.Thinking = &thinkingParam{
+			Type:         "enabled",
+			BudgetTokens: budget,
+		}
+		// Anthropic requires temperature=1 (or unset) when thinking is enabled.
+		mr.Temperature = nil
 	}
 
 	if len(req.Tools) > 0 {
@@ -367,12 +389,20 @@ func toMessages(msgs []talk.Message) ([]message, []systemBlock) {
 		}
 
 		// Regular user or assistant message.
+		var blocks []contentBlock
+		if m.Thinking != "" {
+			blocks = append(blocks, contentBlock{
+				Type:     "thinking",
+				Thinking: m.Thinking,
+			})
+		}
+		blocks = append(blocks, contentBlock{
+			Type: "text",
+			Text: m.Content,
+		})
 		out = append(out, message{
-			Role: string(m.Role),
-			Content: []contentBlock{{
-				Type: "text",
-				Text: m.Content,
-			}},
+			Role:    string(m.Role),
+			Content: blocks,
 		})
 	}
 
@@ -482,12 +512,15 @@ func requiredFromSchema(schema map[string]any) []string {
 
 func fromResponse(resp messagesResponse) talk.Response {
 	var content strings.Builder
+	var thinking strings.Builder
 	var toolCalls []talk.ToolCall
 
 	for _, block := range resp.Content {
 		switch block.Type {
 		case "text":
 			content.WriteString(block.Text)
+		case "thinking":
+			thinking.WriteString(block.Thinking)
 		case "tool_use":
 			toolCalls = append(toolCalls, talk.ToolCall{
 				Name:      block.Name,
@@ -498,6 +531,7 @@ func fromResponse(resp messagesResponse) talk.Response {
 
 	return talk.Response{
 		Content:   content.String(),
+		Thinking:  thinking.String(),
 		ToolCalls: toolCalls,
 		Done:      true,
 	}
@@ -506,14 +540,20 @@ func fromResponse(resp messagesResponse) talk.Response {
 // Wire types for the Anthropic Messages API.
 
 type messagesRequest struct {
-	Model       string        `json:"model"`
-	Messages    []message     `json:"messages"`
-	System      []systemBlock `json:"system,omitempty"`
-	MaxTokens   int           `json:"max_tokens"`
-	Temperature *float64      `json:"temperature,omitempty"`
-	Tools       []toolDef     `json:"tools,omitempty"`
-	ToolChoice  *toolChoice   `json:"tool_choice,omitempty"`
-	Stream      bool          `json:"stream,omitempty"`
+	Model       string         `json:"model"`
+	Messages    []message      `json:"messages"`
+	System      []systemBlock  `json:"system,omitempty"`
+	MaxTokens   int            `json:"max_tokens"`
+	Temperature *float64       `json:"temperature,omitempty"`
+	Thinking    *thinkingParam `json:"thinking,omitempty"`
+	Tools       []toolDef      `json:"tools,omitempty"`
+	ToolChoice  *toolChoice    `json:"tool_choice,omitempty"`
+	Stream      bool           `json:"stream,omitempty"`
+}
+
+type thinkingParam struct {
+	Type         string `json:"type"`
+	BudgetTokens int    `json:"budget_tokens"`
 }
 
 type toolChoice struct {
@@ -539,6 +579,7 @@ type message struct {
 type contentBlock struct {
 	Type      string         `json:"type"`
 	Text      string         `json:"text,omitempty"`
+	Thinking  string         `json:"thinking,omitempty"`
 	ID        string         `json:"id,omitempty"`
 	Name      string         `json:"name,omitempty"`
 	Input     map[string]any `json:"input,omitempty"`
@@ -552,6 +593,14 @@ type contentBlock struct {
 // because the struct has both Content and Text fields.
 func (cb contentBlock) MarshalJSON() ([]byte, error) {
 	switch cb.Type {
+	case "thinking":
+		return json.Marshal(struct {
+			Type     string `json:"type"`
+			Thinking string `json:"thinking"`
+		}{
+			Type:     cb.Type,
+			Thinking: cb.Thinking,
+		})
 	case "tool_result":
 		return json.Marshal(struct {
 			Type      string `json:"type"`
@@ -625,5 +674,6 @@ type streamContentBlockDelta struct {
 type streamDelta struct {
 	Type        string `json:"type"`
 	Text        string `json:"text,omitempty"`
+	Thinking    string `json:"thinking,omitempty"`
 	PartialJSON string `json:"partial_json,omitempty"`
 }

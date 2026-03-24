@@ -47,6 +47,52 @@ func TestLive_StreamingDirect(t *testing.T) {
 	t.Logf("response: %q", content)
 }
 
+func TestLive_StreamThinking(t *testing.T) {
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
+		t.Skip("ANTHROPIC_API_KEY required")
+	}
+
+	client := NewClient("https://api.anthropic.com", apiKey)
+	think := true
+
+	req := &talk.Request{
+		Model: "claude-sonnet-4-6",
+		Messages: []talk.Message{
+			{Role: "user", Content: "What is 15 * 37? Think step by step."},
+		},
+		Stream:  true,
+		Think:   &think,
+		Options: map[string]any{"max_tokens": 16000, "thinking_budget": 5000},
+	}
+
+	var thinking string
+	var content string
+	var gotDone bool
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
+		thinking += resp.Thinking
+		content += resp.Content
+		if resp.Done {
+			gotDone = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+	if !gotDone {
+		t.Error("never received done=true")
+	}
+	if thinking == "" {
+		t.Error("empty thinking content — reasoning tokens not received")
+	}
+	if content == "" {
+		t.Error("empty response content")
+	}
+	t.Logf("thinking: %q", thinking)
+	t.Logf("content: %q", content)
+}
+
 func TestLive_StreamingViaGateway(t *testing.T) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
