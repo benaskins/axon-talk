@@ -1,3 +1,8 @@
+---
+module: github.com/benaskins/axon-talk
+kind: library
+---
+
 # axon-talk
 
 LLM provider adapters implementing a provider-agnostic interface. Each subpackage implements `talk.LLMClient` for a specific backend, translating axon-talk's provider-agnostic request/response types into native API calls.
@@ -17,21 +22,21 @@ The `openai` package works with any provider that speaks the OpenAI `/v1/chat/co
 
 ## Key files
 
-- `doc.go` — package doc
-- `talk.go` — core types and interface definition
-- `ollama/ollama.go` — Ollama adapter
-- `anthropic/anthropic.go` — Anthropic adapter (with streaming, gateway token option)
-- `cloudflare/cloudflare.go` — Cloudflare Workers AI adapter
-- `cloudflare/sse.go` — SSE stream parser for Cloudflare
-- `openai/openai.go` — OpenAI-compatible adapter
-- `openai/sse.go` — SSE stream parser for OpenAI protocol
-- `example/main.go` — usage example
+- `doc.go` -- package doc
+- `talk.go` -- core types and interface definition
+- `ollama/ollama.go` -- Ollama adapter
+- `anthropic/anthropic.go` -- Anthropic adapter (with streaming, gateway token option)
+- `cloudflare/cloudflare.go` -- Cloudflare Workers AI adapter
+- `cloudflare/sse.go` -- SSE stream parser for Cloudflare
+- `openai/openai.go` -- OpenAI-compatible adapter
+- `openai/sse.go` -- SSE stream parser for OpenAI protocol
+- `example/main.go` -- usage example
 
 ## Dependencies
 
-- `axon` — HTTP utilities
-- `axon-tool` — tool definitions for function calling
-- `ollama/ollama` — Ollama Go client (ollama provider only)
+- `axon` -- HTTP utilities
+- `axon-tool` -- tool definitions for function calling
+- `ollama/ollama` -- Ollama Go client (ollama provider only)
 
 ## Build & Test
 
