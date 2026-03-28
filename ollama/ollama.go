@@ -1,4 +1,7 @@
 // Package ollama provides a talk.LLMClient implementation for Ollama.
+//
+// Deprecated: Use the openai package with a llama-server endpoint instead.
+// The ollama package will be removed in a future release.
 package ollama
 
 import (
