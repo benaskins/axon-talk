@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/benaskins/axon/stream"
 	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 	ollamaapi "github.com/ollama/ollama/api"
@@ -62,7 +63,9 @@ func (c *Client) Chat(ctx context.Context, req *talk.Request, fn func(talk.Respo
 	ollamaReq.KeepAlive = &keepAlive
 
 	return c.api.Chat(ctx, ollamaReq, func(resp ollamaapi.ChatResponse) error {
-		return fn(fromResponse(resp))
+		r := fromResponse(resp)
+		normalizeToolCallArgs(&r, req.Tools)
+		return fn(r)
 	})
 }
 
@@ -135,6 +138,29 @@ func filterOllamaOptions(opts map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// normalizeToolCallArgs coerces tool call argument types to match the
+// JSON Schema types declared in each tool's parameter schema.
+func normalizeToolCallArgs(resp *talk.Response, tools []tool.ToolDef) {
+	if len(resp.ToolCalls) == 0 || len(tools) == 0 {
+		return
+	}
+
+	toolTypes := make(map[string]map[string]string, len(tools))
+	for _, td := range tools {
+		types := make(map[string]string, len(td.Parameters.Properties))
+		for name, prop := range td.Parameters.Properties {
+			types[name] = prop.Type
+		}
+		toolTypes[td.Name] = types
+	}
+
+	for i, tc := range resp.ToolCalls {
+		if types, ok := toolTypes[tc.Name]; ok {
+			resp.ToolCalls[i].Arguments = stream.NormalizeArguments(tc.Arguments, types)
+		}
+	}
 }
 
 func fromResponse(resp ollamaapi.ChatResponse) talk.Response {
