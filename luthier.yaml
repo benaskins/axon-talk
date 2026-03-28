@@ -1,0 +1,49 @@
+name: axon-talk
+purpose: LLM provider adapters (Anthropic, Ollama, Cloudflare Workers AI)
+use_when: Depends on axon-loop
+deterministic: false
+snippet:
+  imports:
+    - path: fmt
+    - path: log/slog
+    - path: os
+    - path: strings
+    - path: github.com/benaskins/axon-loop
+      alias: loop
+    - path: github.com/benaskins/axon-talk/anthropic
+  requires:
+    - github.com/benaskins/axon-talk
+    - github.com/benaskins/axon-loop
+  setup: |
+    client := selectLLMClient()
+    if client == nil {
+      fmt.Fprintln(os.Stderr, "no LLM provider available — set ANTHROPIC_API_KEY or CLOUDFLARE_AI_GATEWAY_TOKEN")
+      os.Exit(1)
+    }
+  helpers: |
+    func selectLLMClient() loop.LLMClient {
+      apiKey := os.Getenv("ANTHROPIC_API_KEY")
+      accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+      gwToken := os.Getenv("CLOUDFLARE_AI_GATEWAY_TOKEN")
+
+      if accountID != "" && gwToken != "" {
+        gateway := envOrDefault("CLOUDFLARE_GATEWAY", "axon-gate")
+        baseURL := "https://gateway.ai.cloudflare.com/v1/" + strings.TrimSpace(accountID) + "/" + gateway + "/anthropic"
+        slog.Info("using Anthropic via Cloudflare AI Gateway", "gateway", gateway)
+        return anthropic.NewClient(baseURL, apiKey, anthropic.WithGatewayToken(gwToken))
+      }
+
+      if apiKey != "" {
+        slog.Info("using Anthropic API directly")
+        return anthropic.NewClient("https://api.anthropic.com", apiKey)
+      }
+
+      return nil
+    }
+
+    func envOrDefault(key, fallback string) string {
+      if v := os.Getenv(key); v != "" {
+        return v
+      }
+      return fallback
+    }
