@@ -1,27 +1,29 @@
 //go:build ignore
 
-// Example demonstrates wiring an Ollama provider into axon-loop.
+// Example demonstrates wiring an OpenAI-compatible provider into axon-loop.
 package main
 
 import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	talk "github.com/benaskins/axon-talk"
-	"github.com/benaskins/axon-talk/ollama"
+	"github.com/benaskins/axon-talk/openai"
 )
 
 func main() {
 	ctx := context.Background()
 
-	// Create an LLM client from OLLAMA_HOST (or default localhost:11434).
-	client, err := ollama.NewClientFromEnvironment()
-	if err != nil {
-		log.Fatal(err)
+	baseURL := os.Getenv("OPENAI_BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:11434/v1" // llama-server default
 	}
+	token := os.Getenv("OPENAI_API_KEY")
 
-	// Build a simple request.
+	client := openai.NewClient(baseURL, token)
+
 	req := &talk.Request{
 		Model: "llama3.2",
 		Messages: []talk.Message{
@@ -30,8 +32,7 @@ func main() {
 		Stream: true,
 	}
 
-	// Stream the response, printing tokens as they arrive.
-	err = client.Chat(ctx, req, func(resp talk.Response) error {
+	err := client.Chat(ctx, req, func(resp talk.Response) error {
 		fmt.Print(resp.Content)
 		return nil
 	})
