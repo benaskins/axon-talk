@@ -205,6 +205,12 @@ func buildRequest(req *talk.Request) chatRequest {
 		cr.Stream = &s
 	}
 
+	if v, ok := req.Options["parallel_tool_calls"]; ok {
+		if ptc, ok := v.(bool); ok {
+			cr.ParallelToolCalls = &ptc
+		}
+	}
+
 	if schema, ok := req.Options["structured_output"].(map[string]any); ok {
 		cr.ResponseFormat = &responseFormat{
 			Type: "json_schema",
@@ -364,13 +370,14 @@ func normalizeToolCallArgs(resp *talk.Response, tools []tool.ToolDef) {
 // Wire types for the OpenAI chat completions API.
 
 type chatRequest struct {
-	Model          string          `json:"model"`
-	Messages       []message       `json:"messages"`
-	MaxTokens      int             `json:"max_tokens,omitempty"`
-	Temperature    *float64        `json:"temperature,omitempty"`
-	Tools          []toolDef       `json:"tools,omitempty"`
-	Stream         *bool           `json:"stream,omitempty"`
-	ResponseFormat *responseFormat `json:"response_format,omitempty"`
+	Model              string          `json:"model"`
+	Messages           []message       `json:"messages"`
+	MaxTokens          int             `json:"max_tokens,omitempty"`
+	Temperature        *float64        `json:"temperature,omitempty"`
+	Tools              []toolDef       `json:"tools,omitempty"`
+	Stream             *bool           `json:"stream,omitempty"`
+	ResponseFormat     *responseFormat `json:"response_format,omitempty"`
+	ParallelToolCalls  *bool           `json:"parallel_tool_calls,omitempty"`
 }
 
 type responseFormat struct {

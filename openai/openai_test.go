@@ -522,6 +522,55 @@ func TestChat_StructuredOutput(t *testing.T) {
 	}
 }
 
+func TestChat_ParallelToolCalls(t *testing.T) {
+	var gotBody chatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+
+	t.Run("enabled", func(t *testing.T) {
+		req := &talk.Request{
+			Model:    "gpt-4o",
+			Messages: []talk.Message{{Role: "user", Content: "hi"}},
+			Options:  map[string]any{"parallel_tool_calls": true},
+		}
+		client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+		if gotBody.ParallelToolCalls == nil || *gotBody.ParallelToolCalls != true {
+			t.Errorf("parallel_tool_calls = %v, want true", gotBody.ParallelToolCalls)
+		}
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		req := &talk.Request{
+			Model:    "gpt-4o",
+			Messages: []talk.Message{{Role: "user", Content: "hi"}},
+			Options:  map[string]any{"parallel_tool_calls": false},
+		}
+		client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+		if gotBody.ParallelToolCalls == nil || *gotBody.ParallelToolCalls != false {
+			t.Errorf("parallel_tool_calls = %v, want false", gotBody.ParallelToolCalls)
+		}
+	})
+
+	t.Run("omitted", func(t *testing.T) {
+		gotBody = chatRequest{}
+		req := &talk.Request{
+			Model:    "gpt-4o",
+			Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		}
+		client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+		if gotBody.ParallelToolCalls != nil {
+			t.Errorf("parallel_tool_calls = %v, want nil", gotBody.ParallelToolCalls)
+		}
+	})
+}
+
 func TestChat_MaxTokensFromOptions(t *testing.T) {
 	var gotBody chatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
