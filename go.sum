@@ -4,10 +4,10 @@ github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de h1:FxWPpzIjnTlhP
 github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de/go.mod h1:DCaWoUhZrYW9p1lxo/cm8EmUOOzAPSEZNGF2DK1dJgw=
 github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
-github.com/benaskins/axon v0.4.3 h1:MnNUCLDIpTueaVL/DPcBdiGj7vY0LSK0/Cba5M0yWYY=
-github.com/benaskins/axon v0.4.3/go.mod h1:Ee45fCSquU1tHR/hspDVG2ECB8cKhKpD2UXcOlfYZd0=
-github.com/benaskins/axon-tool v0.1.6 h1:ZEtkYstvyIY5TOy3pvwKPrrE5ewmCLJDK6K8F8RVGgU=
-github.com/benaskins/axon-tool v0.1.6/go.mod h1:RYjjCx5vt/TRl+uUmEWYXeF5yJNNNW6irJhAc4frcQI=
+github.com/benaskins/axon-tape v0.1.1 h1:ZL/QJ3TQjEtcXtozp0Ww9GbuzOLRsnFIzHjV7vQJzlo=
+github.com/benaskins/axon-tape v0.1.1/go.mod h1:j7B7BlQjvqX+U5djQooLIYRZ0Njvvgj/QQGTkPzm2ag=
+github.com/benaskins/axon-tool v0.2.0 h1:TN4BqXy5I70EolnfdsBrBWammR061qy5wGO4DRWBXnI=
+github.com/benaskins/axon-tool v0.2.0/go.mod h1:pStuNrCGHHpuzA15VnQINDDT8aU8jTq5Xd8UqLmwgNg=
 github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
 github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=

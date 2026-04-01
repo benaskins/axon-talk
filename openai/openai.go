@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/benaskins/axon/stream"
 	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
@@ -362,7 +361,7 @@ func normalizeToolCallArgs(resp *talk.Response, tools []tool.ToolDef) {
 
 	for i, tc := range resp.ToolCalls {
 		if types, ok := toolTypes[tc.Name]; ok {
-			resp.ToolCalls[i].Arguments = stream.NormalizeArguments(tc.Arguments, types)
+			resp.ToolCalls[i].Arguments = tool.NormalizeArguments(tc.Arguments, types)
 		}
 	}
 }

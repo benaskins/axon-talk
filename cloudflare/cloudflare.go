@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/benaskins/axon/stream"
+	"github.com/benaskins/axon-tape"
 	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
 )
@@ -136,15 +136,15 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 	// flow through immediately unless ToolCallMatcher signals PartialMatch
 	// (JSON might be forming), in which case they're held in the buffer.
 	var filterErr error
-	filter := stream.NewStreamFilter(
+	filter := tape.NewStreamFilter(
 		func(token string) {
 			if filterErr != nil {
 				return
 			}
 			filterErr = fn(talk.Response{Content: token})
 		},
-		[]stream.Matcher{stream.NewToolCallMatcher()},
-		stream.DefaultMaxBuffer,
+		[]tape.Matcher{tool.NewToolCallMatcher()},
+		tape.DefaultMaxBuffer,
 	)
 
 	err := parseSSE(httpResp.Body, func(ev sseEvent) error {
@@ -220,8 +220,8 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 }
 
 // collectFilterToolCalls converts a StreamFilter action into tool calls.
-func collectFilterToolCalls(action stream.FilterAction) []talk.ToolCall {
-	tca, ok := action.(stream.ToolCallAction)
+func collectFilterToolCalls(action tape.FilterAction) []talk.ToolCall {
+	tca, ok := action.(tool.ToolCallAction)
 	if !ok || len(tca.Calls) == 0 {
 		return nil
 	}
@@ -409,7 +409,7 @@ func fromOpenAIResponse(choice choice) talk.Response {
 
 	// Fallback: if no structured tool calls, check if the model dumped
 	// a tool call as JSON in the content text. The ToolCallMatcher from
-	// axon/stream handles fenced code blocks, bare JSON objects/arrays.
+	// axon-tool's ToolCallMatcher handles fenced code blocks, bare JSON objects/arrays.
 	if len(resp.ToolCalls) == 0 && resp.Content != "" {
 		resp = tryMatchContentToolCalls(resp)
 	}
@@ -441,10 +441,10 @@ func fromNativeResponse(result chatCompletion) talk.Response {
 }
 
 func tryMatchContentToolCalls(resp talk.Response) talk.Response {
-	matcher := stream.NewToolCallMatcher()
-	if matcher.Scan([]byte(resp.Content), "") == stream.FullMatch {
-		if action := matcher.Extract([]byte(resp.Content)); action != (stream.ContinueAction{}) {
-			if tca, ok := action.(stream.ToolCallAction); ok {
+	matcher := tool.NewToolCallMatcher()
+	if matcher.Scan([]byte(resp.Content), "") == tape.FullMatch {
+		if action := matcher.Extract([]byte(resp.Content)); action != (tape.ContinueAction{}) {
+			if tca, ok := action.(tool.ToolCallAction); ok {
 				resp.ToolCalls = make([]talk.ToolCall, len(tca.Calls))
 				for i, tc := range tca.Calls {
 					resp.ToolCalls[i] = talk.ToolCall{
@@ -477,7 +477,7 @@ func normalizeToolCallArgs(resp *talk.Response, tools []tool.ToolDef) {
 
 	for i, tc := range resp.ToolCalls {
 		if types, ok := toolTypes[tc.Name]; ok {
-			resp.ToolCalls[i].Arguments = stream.NormalizeArguments(tc.Arguments, types)
+			resp.ToolCalls[i].Arguments = tool.NormalizeArguments(tc.Arguments, types)
 		}
 	}
 }
