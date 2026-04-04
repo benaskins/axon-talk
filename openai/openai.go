@@ -197,6 +197,11 @@ func buildRequest(req *talk.Request) chatRequest {
 
 	if len(req.Tools) > 0 {
 		cr.Tools = toTools(req.Tools)
+		cr.ToolChoice = "auto"
+	}
+
+	if v, ok := req.Options["tool_choice"]; ok {
+		cr.ToolChoice = v
 	}
 
 	if req.Stream {
@@ -374,6 +379,7 @@ type chatRequest struct {
 	MaxTokens          int             `json:"max_tokens,omitempty"`
 	Temperature        *float64        `json:"temperature,omitempty"`
 	Tools              []toolDef       `json:"tools,omitempty"`
+	ToolChoice         any             `json:"tool_choice,omitempty"`
 	Stream             *bool           `json:"stream,omitempty"`
 	ResponseFormat     *responseFormat `json:"response_format,omitempty"`
 	ParallelToolCalls  *bool           `json:"parallel_tool_calls,omitempty"`

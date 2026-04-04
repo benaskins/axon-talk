@@ -594,3 +594,91 @@ func TestChat_MaxTokensFromOptions(t *testing.T) {
 		t.Errorf("max_tokens = %d, want 500", gotBody.MaxTokens)
 	}
 }
+
+func TestChat_ToolChoiceAutoWhenToolsPresent(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &talk.Request{
+		Model:    "gpt-4o",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Tools: []tool.ToolDef{{
+			Name:        "search",
+			Description: "Search",
+			Parameters:  tool.ParameterSchema{Type: "object"},
+		}},
+	}
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	tc, ok := gotBody["tool_choice"]
+	if !ok {
+		t.Fatal("expected tool_choice in request when tools present")
+	}
+	if tc != "auto" {
+		t.Errorf("tool_choice = %v, want auto", tc)
+	}
+}
+
+func TestChat_ToolChoiceOverrideFromOptions(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &talk.Request{
+		Model:    "gpt-4o",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Tools: []tool.ToolDef{{
+			Name:        "search",
+			Description: "Search",
+			Parameters:  tool.ParameterSchema{Type: "object"},
+		}},
+		Options: map[string]any{"tool_choice": "required"},
+	}
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	tc, ok := gotBody["tool_choice"]
+	if !ok {
+		t.Fatal("expected tool_choice in request")
+	}
+	if tc != "required" {
+		t.Errorf("tool_choice = %v, want required", tc)
+	}
+}
+
+func TestChat_NoToolChoiceWithoutTools(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &talk.Request{
+		Model:    "gpt-4o",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+	}
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	if _, ok := gotBody["tool_choice"]; ok {
+		t.Error("tool_choice should not be present when no tools provided")
+	}
+}
