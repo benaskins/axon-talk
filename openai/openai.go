@@ -197,7 +197,6 @@ func buildRequest(req *talk.Request) chatRequest {
 
 	if len(req.Tools) > 0 {
 		cr.Tools = toTools(req.Tools)
-		cr.ToolChoice = "auto"
 	}
 
 	if v, ok := req.Options["tool_choice"]; ok {

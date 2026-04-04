@@ -595,7 +595,7 @@ func TestChat_MaxTokensFromOptions(t *testing.T) {
 	}
 }
 
-func TestChat_ToolChoiceAutoWhenToolsPresent(t *testing.T) {
+func TestChat_NoToolChoiceByDefault(t *testing.T) {
 	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&gotBody)
@@ -618,12 +618,8 @@ func TestChat_ToolChoiceAutoWhenToolsPresent(t *testing.T) {
 
 	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
 
-	tc, ok := gotBody["tool_choice"]
-	if !ok {
-		t.Fatal("expected tool_choice in request when tools present")
-	}
-	if tc != "auto" {
-		t.Errorf("tool_choice = %v, want auto", tc)
+	if _, ok := gotBody["tool_choice"]; ok {
+		t.Error("tool_choice should not be sent by default (not all providers support it)")
 	}
 }
 
