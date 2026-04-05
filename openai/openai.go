@@ -24,6 +24,7 @@ type Client struct {
 	token        string
 	gatewayToken string // optional gateway auth token (e.g. Cloudflare AI Gateway)
 	httpClient   *http.Client
+	headers      map[string]string // custom headers sent with every request
 }
 
 // Option configures a Client.
@@ -39,6 +40,12 @@ func WithHTTPClient(c *http.Client) Option {
 // for use with Cloudflare AI Gateway or similar proxies.
 func WithGatewayToken(token string) Option {
 	return func(cl *Client) { cl.gatewayToken = token }
+}
+
+// WithHeaders adds custom headers to every request.
+// Useful for identity/tracing headers (X-Title, HTTP-Referer, etc).
+func WithHeaders(headers map[string]string) Option {
+	return func(cl *Client) { cl.headers = headers }
 }
 
 // NewClient creates a Client that talks to an OpenAI-compatible API.
@@ -78,6 +85,9 @@ func (c *Client) Chat(ctx context.Context, req *talk.Request, fn func(talk.Respo
 	httpReq.Header.Set("Content-Type", "application/json")
 	if c.gatewayToken != "" {
 		httpReq.Header.Set("cf-aig-authorization", "Bearer "+c.gatewayToken)
+	}
+	for k, v := range c.headers {
+		httpReq.Header.Set(k, v)
 	}
 
 	httpResp, err := c.httpClient.Do(httpReq)

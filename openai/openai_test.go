@@ -15,6 +15,34 @@ func TestClientImplementsLLMClient(t *testing.T) {
 	var _ talk.LLMClient = NewClient("http://example.com", "token")
 }
 
+func TestWithHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Title"); got != "mech-hand/bold-elm" {
+			t.Errorf("X-Title = %q, want mech-hand/bold-elm", got)
+		}
+		if got := r.Header.Get("HTTP-Referer"); got != "werkhaus:mech-hand" {
+			t.Errorf("HTTP-Referer = %q, want werkhaus:mech-hand", got)
+		}
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token", WithHeaders(map[string]string{
+		"X-Title":      "mech-hand/bold-elm",
+		"HTTP-Referer": "werkhaus:mech-hand",
+	}))
+	req := &talk.Request{
+		Model:    "test",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+	}
+	err := client.Chat(context.Background(), req, func(talk.Response) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestChat_BasicResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-token" {
