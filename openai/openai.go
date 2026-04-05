@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	talk "github.com/benaskins/axon-talk"
 	tool "github.com/benaskins/axon-tool"
@@ -49,7 +50,7 @@ func NewClient(baseURL, token string, opts ...Option) *Client {
 	c := &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		token:      token,
-		httpClient: http.DefaultClient,
+		httpClient: &http.Client{Timeout: 5 * time.Minute},
 	}
 	for _, opt := range opts {
 		opt(c)
