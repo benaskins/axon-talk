@@ -97,7 +97,7 @@ func (c *Client) Chat(ctx context.Context, req *talk.Request, fn func(talk.Respo
 	defer httpResp.Body.Close()
 
 	if req.Stream {
-		return c.handleStream(httpResp, req.Tools, fn)
+		return c.handleStream(ctx, httpResp, req.Tools, fn)
 	}
 	return c.handleFull(httpResp, req.Tools, fn)
 }
@@ -122,11 +122,15 @@ func (c *Client) handleFull(httpResp *http.Response, tools []tool.ToolDef, fn fu
 	return fn(resp)
 }
 
-func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn func(talk.Response) error) error {
+func (c *Client) handleStream(ctx context.Context, httpResp *http.Response, tools []tool.ToolDef, fn func(talk.Response) error) error {
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
 		return &talk.StatusError{StatusCode: httpResp.StatusCode, Body: string(respBody), Provider: "openai"}
 	}
+
+	// Wrap the body so reads are interrupted when the context is cancelled.
+	// This ensures parseSSE's scanner.Scan() returns promptly on timeout.
+	body := newContextReader(ctx, httpResp.Body)
 
 	// Accumulate structured tool calls by index.
 	type pendingToolCall struct {
@@ -135,7 +139,7 @@ func (c *Client) handleStream(httpResp *http.Response, tools []tool.ToolDef, fn 
 	}
 	pending := make(map[int]*pendingToolCall)
 
-	err := parseSSE(httpResp.Body, func(ev sseEvent) error {
+	err := parseSSE(body, func(ev sseEvent) error {
 		if ev.Done {
 			var toolCalls []talk.ToolCall
 			for i := 0; i < len(pending); i++ {
