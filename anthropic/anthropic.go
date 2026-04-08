@@ -140,6 +140,7 @@ func (c *Client) handleStream(body io.Reader, fn func(talk.Response) error) erro
 		args strings.Builder
 	}
 	var pending []*pendingToolUse
+	var usage *apiUsage
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -158,6 +159,12 @@ func (c *Client) handleStream(body io.Reader, fn func(talk.Response) error) erro
 			data := strings.TrimPrefix(dataLine, "data: ")
 
 			switch eventType {
+			case "message_start":
+				var ev streamMessageStart
+				if err := json.Unmarshal([]byte(data), &ev); err == nil && ev.Message.Usage != nil {
+					usage = ev.Message.Usage
+				}
+
 			case "content_block_start":
 				var ev streamContentBlockStart
 				if err := json.Unmarshal([]byte(data), &ev); err != nil {
@@ -191,6 +198,15 @@ func (c *Client) handleStream(body io.Reader, fn func(talk.Response) error) erro
 				}
 
 			case "message_delta":
+				// Capture output tokens from message_delta usage.
+				var ev streamMessageDelta
+				if err := json.Unmarshal([]byte(data), &ev); err == nil && ev.Usage != nil {
+					if usage == nil {
+						usage = &apiUsage{}
+					}
+					usage.OutputTokens = ev.Usage.OutputTokens
+				}
+
 				// Final event — assemble tool calls and signal done.
 				var toolCalls []talk.ToolCall
 				for _, p := range pending {
@@ -203,7 +219,16 @@ func (c *Client) handleStream(body io.Reader, fn func(talk.Response) error) erro
 						Arguments: args,
 					})
 				}
-				if err := fn(talk.Response{Done: true, ToolCalls: toolCalls}); err != nil {
+				resp := talk.Response{Done: true, ToolCalls: toolCalls}
+				if usage != nil {
+					resp.Usage = &talk.Usage{
+						InputTokens:              usage.InputTokens,
+						OutputTokens:             usage.OutputTokens,
+						CacheCreationInputTokens: usage.CacheCreationInputTokens,
+						CacheReadInputTokens:     usage.CacheReadInputTokens,
+					}
+				}
+				if err := fn(resp); err != nil {
 					return err
 				}
 
@@ -693,4 +718,14 @@ type streamDelta struct {
 	Text        string `json:"text,omitempty"`
 	Thinking    string `json:"thinking,omitempty"`
 	PartialJSON string `json:"partial_json,omitempty"`
+}
+
+type streamMessageStart struct {
+	Message struct {
+		Usage *apiUsage `json:"usage,omitempty"`
+	} `json:"message"`
+}
+
+type streamMessageDelta struct {
+	Usage *apiUsage `json:"usage,omitempty"`
 }

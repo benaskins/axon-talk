@@ -219,6 +219,120 @@ data: {"type":"message_stop"}`,
 	}
 }
 
+func TestChat_StreamUsage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+
+		events := []string{
+			`event: message_start
+data: {"type":"message_start","message":{"id":"msg_01","type":"message","role":"assistant","content":[],"model":"claude-opus-4-6","usage":{"input_tokens":100,"output_tokens":0,"cache_creation_input_tokens":50,"cache_read_input_tokens":30}}}`,
+			`event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`,
+			`event: content_block_stop
+data: {"type":"content_block_stop","index":0}`,
+			`event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":25}}`,
+			`event: message_stop
+data: {"type":"message_stop"}`,
+		}
+
+		for _, ev := range events {
+			fmt.Fprintf(w, "%s\n\n", ev)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	req := &talk.Request{
+		Model:    "claude-opus-4-6",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Stream:   true,
+		Options:  map[string]any{"max_tokens": 1024},
+	}
+
+	var final talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
+		if resp.Done {
+			final = resp
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+
+	if final.Usage == nil {
+		t.Fatal("expected usage on done response")
+	}
+	if final.Usage.InputTokens != 100 {
+		t.Errorf("InputTokens = %d, want 100", final.Usage.InputTokens)
+	}
+	if final.Usage.OutputTokens != 25 {
+		t.Errorf("OutputTokens = %d, want 25", final.Usage.OutputTokens)
+	}
+	if final.Usage.CacheCreationInputTokens != 50 {
+		t.Errorf("CacheCreationInputTokens = %d, want 50", final.Usage.CacheCreationInputTokens)
+	}
+	if final.Usage.CacheReadInputTokens != 30 {
+		t.Errorf("CacheReadInputTokens = %d, want 30", final.Usage.CacheReadInputTokens)
+	}
+}
+
+func TestChat_StreamNoUsageWhenAbsent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+
+		events := []string{
+			`event: message_start
+data: {"type":"message_start","message":{"id":"msg_01","type":"message","role":"assistant","content":[]}}`,
+			`event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}`,
+			`event: content_block_stop
+data: {"type":"content_block_stop","index":0}`,
+			`event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
+			`event: message_stop
+data: {"type":"message_stop"}`,
+		}
+
+		for _, ev := range events {
+			fmt.Fprintf(w, "%s\n\n", ev)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	req := &talk.Request{
+		Model:    "claude-opus-4-6",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Stream:   true,
+		Options:  map[string]any{"max_tokens": 1024},
+	}
+
+	var final talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
+		if resp.Done {
+			final = resp
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+
+	if final.Usage != nil {
+		t.Error("usage should be nil when not in stream events")
+	}
+}
+
 func TestChat_StreamError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
