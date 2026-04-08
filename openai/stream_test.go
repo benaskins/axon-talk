@@ -244,6 +244,102 @@ func TestChat_StreamNormalizesToolCallArgs(t *testing.T) {
 	}
 }
 
+func TestChat_StreamUsageOnSeparateChunk(t *testing.T) {
+	// With stream_options.include_usage, usage arrives on a final chunk
+	// with an empty choices array.
+	server := sseServer(
+		`{"choices":[{"delta":{"content":"Hello"}}]}`,
+		`{"choices":[{"delta":{"content":" world"}}]}`,
+		`{"choices":[],"usage":{"prompt_tokens":15,"completion_tokens":3,"total_tokens":18}}`,
+		"[DONE]",
+	)
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &talk.Request{
+		Model:    "gpt-4o",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Stream:   true,
+	}
+
+	var final talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
+		if resp.Done {
+			final = resp
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+	if final.Usage == nil {
+		t.Fatal("expected usage on done response")
+	}
+	if final.Usage.InputTokens != 15 {
+		t.Errorf("InputTokens = %d, want 15", final.Usage.InputTokens)
+	}
+	if final.Usage.OutputTokens != 3 {
+		t.Errorf("OutputTokens = %d, want 3", final.Usage.OutputTokens)
+	}
+}
+
+func TestChat_StreamSendsStreamOptions(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", `{"choices":[{"delta":{"content":"ok"}}]}`)
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &talk.Request{
+		Model:    "gpt-4o",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Stream:   true,
+	}
+
+	client.Chat(context.Background(), req, func(resp talk.Response) error { return nil })
+
+	so, ok := gotBody["stream_options"].(map[string]any)
+	if !ok {
+		t.Fatal("stream_options should be set in request")
+	}
+	if so["include_usage"] != true {
+		t.Errorf("include_usage = %v, want true", so["include_usage"])
+	}
+}
+
+func TestChat_StreamNoUsageWhenAbsent(t *testing.T) {
+	server := sseServer(
+		`{"choices":[{"delta":{"content":"hi"}}]}`,
+		"[DONE]",
+	)
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &talk.Request{
+		Model:    "gpt-4o",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Stream:   true,
+	}
+
+	var final talk.Response
+	err := client.Chat(context.Background(), req, func(resp talk.Response) error {
+		if resp.Done {
+			final = resp
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Chat error: %v", err)
+	}
+	if final.Usage != nil {
+		t.Error("usage should be nil when not in stream")
+	}
+}
+
 func TestChat_StreamAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)

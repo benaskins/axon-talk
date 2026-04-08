@@ -12,6 +12,7 @@ import (
 type sseEvent struct {
 	Delta streamDelta
 	Done  bool
+	Usage *completionUsage
 }
 
 // streamDelta is the delta object from a streaming chunk.
@@ -37,7 +38,8 @@ type streamToolCallFunction struct {
 
 // streamChunk is the wire format for a single SSE data line.
 type streamChunk struct {
-	Choices []streamChoice `json:"choices"`
+	Choices []streamChoice   `json:"choices"`
+	Usage   *completionUsage `json:"usage,omitempty"`
 }
 
 // streamChoice wraps the delta in the OpenAI-compatible format.
@@ -68,10 +70,17 @@ func parseSSE(r io.Reader, fn func(sseEvent) error) error {
 		}
 
 		if len(chunk.Choices) == 0 {
+			// Usage-only chunk (final chunk with stream_options.include_usage)
+			if chunk.Usage != nil {
+				if err := fn(sseEvent{Usage: chunk.Usage}); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 
-		if err := fn(sseEvent{Delta: chunk.Choices[0].Delta}); err != nil {
+		ev := sseEvent{Delta: chunk.Choices[0].Delta, Usage: chunk.Usage}
+		if err := fn(ev); err != nil {
 			return err
 		}
 	}

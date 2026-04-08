@@ -138,8 +138,14 @@ func (c *Client) handleStream(ctx context.Context, httpResp *http.Response, tool
 		args strings.Builder
 	}
 	pending := make(map[int]*pendingToolCall)
+	var usage *completionUsage
 
 	err := parseSSE(body, func(ev sseEvent) error {
+		// Capture usage from whichever chunk carries it.
+		if ev.Usage != nil {
+			usage = ev.Usage
+		}
+
 		if ev.Done {
 			var toolCalls []talk.ToolCall
 			for i := 0; i < len(pending); i++ {
@@ -155,6 +161,12 @@ func (c *Client) handleStream(ctx context.Context, httpResp *http.Response, tool
 			}
 
 			resp := talk.Response{Done: true, ToolCalls: toolCalls}
+			if usage != nil {
+				resp.Usage = &talk.Usage{
+					InputTokens:  usage.PromptTokens,
+					OutputTokens: usage.CompletionTokens,
+				}
+			}
 			normalizeToolCallArgs(&resp, tools)
 			return fn(resp)
 		}
@@ -221,6 +233,7 @@ func buildRequest(req *talk.Request) chatRequest {
 	if req.Stream {
 		s := true
 		cr.Stream = &s
+		cr.StreamOptions = &streamOptions{IncludeUsage: true}
 	}
 
 	if v, ok := req.Options["parallel_tool_calls"]; ok {
@@ -402,8 +415,13 @@ type chatRequest struct {
 	Tools              []toolDef       `json:"tools,omitempty"`
 	ToolChoice         any             `json:"tool_choice,omitempty"`
 	Stream             *bool           `json:"stream,omitempty"`
+	StreamOptions      *streamOptions  `json:"stream_options,omitempty"`
 	ResponseFormat     *responseFormat `json:"response_format,omitempty"`
 	ParallelToolCalls  *bool           `json:"parallel_tool_calls,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type responseFormat struct {
