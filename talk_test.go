@@ -88,6 +88,30 @@ func TestWithStructuredOutput(t *testing.T) {
 	}
 }
 
+func TestUsage_TotalTokens(t *testing.T) {
+	u := Usage{InputTokens: 100, OutputTokens: 50}
+	if got := u.TotalTokens(); got != 150 {
+		t.Errorf("TotalTokens() = %d, want 150", got)
+	}
+}
+
+func TestUsage_ZeroValue(t *testing.T) {
+	var u Usage
+	if u.TotalTokens() != 0 {
+		t.Error("zero Usage should have TotalTokens() == 0")
+	}
+	if u.CacheCreationInputTokens != 0 || u.CacheReadInputTokens != 0 {
+		t.Error("zero Usage should have zero cache stats")
+	}
+}
+
+func TestResponse_UsageNilByDefault(t *testing.T) {
+	var r Response
+	if r.Usage != nil {
+		t.Error("default Response.Usage should be nil")
+	}
+}
+
 func TestRoleConstants(t *testing.T) {
 	if RoleSystem != "system" {
 		t.Errorf("RoleSystem = %q", RoleSystem)

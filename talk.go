@@ -45,12 +45,26 @@ type Request struct {
 	MaxTokens     int // Maximum estimated token budget for messages. 0 means no limit.
 }
 
+// Usage reports token consumption for a single LLM call.
+type Usage struct {
+	InputTokens  int
+	OutputTokens int
+
+	// Cache stats (zero when the provider does not support caching).
+	CacheCreationInputTokens int
+	CacheReadInputTokens     int
+}
+
+// TotalTokens returns InputTokens + OutputTokens.
+func (u Usage) TotalTokens() int { return u.InputTokens + u.OutputTokens }
+
 // Response is a provider-agnostic streamed response chunk from an LLM.
 type Response struct {
 	Content   string
 	Thinking  string
 	Done      bool
 	ToolCalls []ToolCall
+	Usage     *Usage // non-nil on the final chunk (Done=true) when the provider reports it
 }
 
 // LLMClient abstracts communication with an LLM backend.
