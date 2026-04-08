@@ -359,6 +359,13 @@ func fromResponse(completion chatCompletion) talk.Response {
 		}
 	}
 
+	if completion.Usage != nil {
+		resp.Usage = &talk.Usage{
+			InputTokens:  completion.Usage.PromptTokens,
+			OutputTokens: completion.Usage.CompletionTokens,
+		}
+	}
+
 	return resp
 }
 
@@ -456,7 +463,14 @@ type propertyDef struct {
 }
 
 type chatCompletion struct {
-	Choices []choice `json:"choices"`
+	Choices []choice        `json:"choices"`
+	Usage   *completionUsage `json:"usage,omitempty"`
+}
+
+type completionUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
 }
 
 type choice struct {

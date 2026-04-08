@@ -684,6 +684,66 @@ func TestChat_ToolChoiceOverrideFromOptions(t *testing.T) {
 	}
 }
 
+func TestChat_UsageInResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: "hello"}}},
+			Usage:   &completionUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &talk.Request{
+		Model:    "gpt-4o",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+	}
+
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
+		got = resp
+		return nil
+	})
+
+	if got.Usage == nil {
+		t.Fatal("usage should not be nil")
+	}
+	if got.Usage.InputTokens != 10 {
+		t.Errorf("InputTokens = %d, want 10", got.Usage.InputTokens)
+	}
+	if got.Usage.OutputTokens != 5 {
+		t.Errorf("OutputTokens = %d, want 5", got.Usage.OutputTokens)
+	}
+	if got.Usage.TotalTokens() != 15 {
+		t.Errorf("TotalTokens() = %d, want 15", got.Usage.TotalTokens())
+	}
+}
+
+func TestChat_NoUsageWhenAbsent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(chatCompletion{
+			Choices: []choice{{Message: responseMessage{Content: "hello"}}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "token")
+	req := &talk.Request{
+		Model:    "gpt-4o",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+	}
+
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
+		got = resp
+		return nil
+	})
+
+	if got.Usage != nil {
+		t.Error("usage should be nil when not in response")
+	}
+}
+
 func TestChat_NoToolChoiceWithoutTools(t *testing.T) {
 	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
