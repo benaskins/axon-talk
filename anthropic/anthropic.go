@@ -529,12 +529,21 @@ func fromResponse(resp messagesResponse) talk.Response {
 		}
 	}
 
-	return talk.Response{
+	r := talk.Response{
 		Content:   content.String(),
 		Thinking:  thinking.String(),
 		ToolCalls: toolCalls,
 		Done:      true,
 	}
+	if resp.Usage != nil {
+		r.Usage = &talk.Usage{
+			InputTokens:             resp.Usage.InputTokens,
+			OutputTokens:            resp.Usage.OutputTokens,
+			CacheCreationInputTokens: resp.Usage.CacheCreationInputTokens,
+			CacheReadInputTokens:    resp.Usage.CacheReadInputTokens,
+		}
+	}
+	return r
 }
 
 // Wire types for the Anthropic Messages API.
@@ -637,6 +646,14 @@ func (cb contentBlock) MarshalJSON() ([]byte, error) {
 type messagesResponse struct {
 	Content    []contentBlock `json:"content"`
 	StopReason string         `json:"stop_reason"`
+	Usage      *apiUsage      `json:"usage,omitempty"`
+}
+
+type apiUsage struct {
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 }
 
 type toolDef struct {

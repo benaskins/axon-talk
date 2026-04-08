@@ -932,3 +932,75 @@ func TestChat_NoCaching_NoCacheControl(t *testing.T) {
 		t.Error("cache_control should not be present without WithPromptCaching")
 	}
 }
+
+func TestChat_UsageInResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "hello"}},
+			StopReason: "end_turn",
+			Usage: &apiUsage{
+				InputTokens:              100,
+				OutputTokens:             25,
+				CacheCreationInputTokens: 50,
+				CacheReadInputTokens:     30,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	req := &talk.Request{
+		Model:    "claude-opus-4-6",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Options:  map[string]any{"max_tokens": 1024},
+	}
+
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
+		got = resp
+		return nil
+	})
+
+	if got.Usage == nil {
+		t.Fatal("usage should not be nil")
+	}
+	if got.Usage.InputTokens != 100 {
+		t.Errorf("InputTokens = %d, want 100", got.Usage.InputTokens)
+	}
+	if got.Usage.OutputTokens != 25 {
+		t.Errorf("OutputTokens = %d, want 25", got.Usage.OutputTokens)
+	}
+	if got.Usage.CacheCreationInputTokens != 50 {
+		t.Errorf("CacheCreationInputTokens = %d, want 50", got.Usage.CacheCreationInputTokens)
+	}
+	if got.Usage.CacheReadInputTokens != 30 {
+		t.Errorf("CacheReadInputTokens = %d, want 30", got.Usage.CacheReadInputTokens)
+	}
+}
+
+func TestChat_NoUsageWhenAbsent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(messagesResponse{
+			Content:    []contentBlock{{Type: "text", Text: "hello"}},
+			StopReason: "end_turn",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "key")
+	req := &talk.Request{
+		Model:    "claude-opus-4-6",
+		Messages: []talk.Message{{Role: "user", Content: "hi"}},
+		Options:  map[string]any{"max_tokens": 1024},
+	}
+
+	var got talk.Response
+	client.Chat(context.Background(), req, func(resp talk.Response) error {
+		got = resp
+		return nil
+	})
+
+	if got.Usage != nil {
+		t.Error("usage should be nil when not in response")
+	}
+}
