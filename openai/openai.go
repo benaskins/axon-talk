@@ -242,6 +242,12 @@ func buildRequest(req *talk.Request) chatRequest {
 		}
 	}
 
+	if v, ok := req.Options["session_id"]; ok {
+		if sid, ok := v.(string); ok {
+			cr.SessionID = sid
+		}
+	}
+
 	if schema, ok := req.Options["structured_output"].(map[string]any); ok {
 		cr.ResponseFormat = &responseFormat{
 			Type: "json_schema",
@@ -418,6 +424,7 @@ type chatRequest struct {
 	StreamOptions      *streamOptions  `json:"stream_options,omitempty"`
 	ResponseFormat     *responseFormat `json:"response_format,omitempty"`
 	ParallelToolCalls  *bool           `json:"parallel_tool_calls,omitempty"`
+	SessionID          string          `json:"session_id,omitempty"`
 }
 
 type streamOptions struct {
