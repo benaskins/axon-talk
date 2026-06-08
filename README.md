@@ -44,6 +44,7 @@ err = client.Chat(ctx, req, func(resp talk.Response) error {
 |--------------|--------------------------------|--------------------------------------|
 | `ollama`     | [Ollama](https://ollama.com)   | `ollama.NewClientFromEnvironment()`  |
 | `anthropic`  | Anthropic Messages API         | `anthropic.NewClient(baseURL, key)`  |
+| `bedrock`    | Claude via Amazon Bedrock      | `bedrock.NewClient(modelID, invoke)` |
 | `openai`     | OpenAI-compatible APIs         | `openai.NewClient(baseURL, token)`   |
 | `cloudflare` | Cloudflare Workers AI          | `cloudflare.NewClient(baseURL, token)` |
 
