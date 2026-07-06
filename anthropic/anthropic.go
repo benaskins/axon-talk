@@ -421,10 +421,27 @@ func toMessages(msgs []talk.Message) ([]message, []systemBlock) {
 				Thinking: m.Thinking,
 			})
 		}
-		blocks = append(blocks, contentBlock{
-			Type: "text",
-			Text: m.Content,
-		})
+		// Images attach only to a user turn; Anthropic rejects image blocks on
+		// an assistant message. The Images field is documented as user-only, so
+		// silently ignore it on any other role rather than emit a bad request.
+		hasImages := m.Role == talk.RoleUser && len(m.Images) > 0
+		if hasImages {
+			for _, img := range m.Images {
+				blocks = append(blocks, contentBlock{
+					Type:   "image",
+					Source: &imageSource{Type: "base64", MediaType: img.MediaType, Data: img.Data},
+				})
+			}
+		}
+		// Anthropic rejects an empty text block; skip it when images carry the
+		// message. A textless, imageless message keeps its (empty) text block so
+		// existing behaviour is unchanged.
+		if m.Content != "" || !hasImages {
+			blocks = append(blocks, contentBlock{
+				Type: "text",
+				Text: m.Content,
+			})
+		}
 		out = append(out, message{
 			Role:    string(m.Role),
 			Content: blocks,
@@ -562,10 +579,10 @@ func fromResponse(resp messagesResponse) talk.Response {
 	}
 	if resp.Usage != nil {
 		r.Usage = &talk.Usage{
-			InputTokens:             resp.Usage.InputTokens,
-			OutputTokens:            resp.Usage.OutputTokens,
+			InputTokens:              resp.Usage.InputTokens,
+			OutputTokens:             resp.Usage.OutputTokens,
 			CacheCreationInputTokens: resp.Usage.CacheCreationInputTokens,
-			CacheReadInputTokens:    resp.Usage.CacheReadInputTokens,
+			CacheReadInputTokens:     resp.Usage.CacheReadInputTokens,
 		}
 	}
 	return r
@@ -619,6 +636,14 @@ type contentBlock struct {
 	Input     map[string]any `json:"input,omitempty"`
 	ToolUseID string         `json:"tool_use_id,omitempty"`
 	Content   string         `json:"content,omitempty"`
+	Source    *imageSource   `json:"source,omitempty"`
+}
+
+// imageSource is the Anthropic wire shape for an inline base64 image.
+type imageSource struct {
+	Type      string `json:"type"` // always "base64"
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
 }
 
 // MarshalJSON handles the contentBlock's dual use of the "content" field.
@@ -656,6 +681,14 @@ func (cb contentBlock) MarshalJSON() ([]byte, error) {
 			ID:    cb.ID,
 			Name:  cb.Name,
 			Input: cb.Input,
+		})
+	case "image":
+		return json.Marshal(struct {
+			Type   string       `json:"type"`
+			Source *imageSource `json:"source"`
+		}{
+			Type:   cb.Type,
+			Source: cb.Source,
 		})
 	default:
 		return json.Marshal(struct {

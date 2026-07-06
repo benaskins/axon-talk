@@ -273,6 +273,23 @@ func toMessages(msgs []talk.Message) []message {
 			Content: m.Content,
 		}
 
+		// Images attach only to a user turn. When present, OpenAI requires the
+		// content to be a parts array; text-only messages stay a plain string so
+		// non-vision requests are byte-for-byte unchanged.
+		if m.Role == talk.RoleUser && len(m.Images) > 0 {
+			parts := make([]contentPart, 0, len(m.Images)+1)
+			if m.Content != "" {
+				parts = append(parts, contentPart{Type: "text", Text: m.Content})
+			}
+			for _, img := range m.Images {
+				parts = append(parts, contentPart{
+					Type:     "image_url",
+					ImageURL: &imageURL{URL: "data:" + img.MediaType + ";base64," + img.Data},
+				})
+			}
+			msg.Content = parts
+		}
+
 		if len(m.ToolCalls) > 0 {
 			msg.ToolCalls = toRequestToolCalls(m.ToolCalls)
 			pendingCallIDs = nil
@@ -414,17 +431,17 @@ func normalizeToolCallArgs(resp *talk.Response, tools []tool.ToolDef) {
 // Wire types for the OpenAI chat completions API.
 
 type chatRequest struct {
-	Model              string          `json:"model"`
-	Messages           []message       `json:"messages"`
-	MaxTokens          int             `json:"max_tokens,omitempty"`
-	Temperature        *float64        `json:"temperature,omitempty"`
-	Tools              []toolDef       `json:"tools,omitempty"`
-	ToolChoice         any             `json:"tool_choice,omitempty"`
-	Stream             *bool           `json:"stream,omitempty"`
-	StreamOptions      *streamOptions  `json:"stream_options,omitempty"`
-	ResponseFormat     *responseFormat `json:"response_format,omitempty"`
-	ParallelToolCalls  *bool           `json:"parallel_tool_calls,omitempty"`
-	SessionID          string          `json:"session_id,omitempty"`
+	Model             string          `json:"model"`
+	Messages          []message       `json:"messages"`
+	MaxTokens         int             `json:"max_tokens,omitempty"`
+	Temperature       *float64        `json:"temperature,omitempty"`
+	Tools             []toolDef       `json:"tools,omitempty"`
+	ToolChoice        any             `json:"tool_choice,omitempty"`
+	Stream            *bool           `json:"stream,omitempty"`
+	StreamOptions     *streamOptions  `json:"stream_options,omitempty"`
+	ResponseFormat    *responseFormat `json:"response_format,omitempty"`
+	ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
+	SessionID         string          `json:"session_id,omitempty"`
 }
 
 type streamOptions struct {
@@ -433,7 +450,7 @@ type streamOptions struct {
 
 type responseFormat struct {
 	Type       string            `json:"type"`
-	JSONSchema *jsonSchemaFormat  `json:"json_schema,omitempty"`
+	JSONSchema *jsonSchemaFormat `json:"json_schema,omitempty"`
 }
 
 type jsonSchemaFormat struct {
@@ -444,9 +461,23 @@ type jsonSchemaFormat struct {
 
 type message struct {
 	Role       string            `json:"role"`
-	Content    string            `json:"content"`
+	Content    any               `json:"content"` // string for text-only; []contentPart when images are attached
 	ToolCalls  []requestToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string            `json:"tool_call_id,omitempty"`
+}
+
+// contentPart is one element of an OpenAI multi-part message content array,
+// used only when a user message carries images. Text-only messages send a
+// plain string, so non-vision requests are unchanged.
+type contentPart struct {
+	Type     string    `json:"type"`                // "text" or "image_url"
+	Text     string    `json:"text,omitempty"`      // set when Type == "text"
+	ImageURL *imageURL `json:"image_url,omitempty"` // set when Type == "image_url"
+}
+
+// imageURL wraps an inline image as a data URI (data:<media_type>;base64,<data>).
+type imageURL struct {
+	URL string `json:"url"`
 }
 
 type requestToolCall struct {
@@ -488,7 +519,7 @@ type propertyDef struct {
 }
 
 type chatCompletion struct {
-	Choices []choice        `json:"choices"`
+	Choices []choice         `json:"choices"`
 	Usage   *completionUsage `json:"usage,omitempty"`
 }
 
