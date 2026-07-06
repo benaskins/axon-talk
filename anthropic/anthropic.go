@@ -421,16 +421,22 @@ func toMessages(msgs []talk.Message) ([]message, []systemBlock) {
 				Thinking: m.Thinking,
 			})
 		}
-		for _, img := range m.Images {
-			blocks = append(blocks, contentBlock{
-				Type:   "image",
-				Source: &imageSource{Type: "base64", MediaType: img.MediaType, Data: img.Data},
-			})
+		// Images attach only to a user turn; Anthropic rejects image blocks on
+		// an assistant message. The Images field is documented as user-only, so
+		// silently ignore it on any other role rather than emit a bad request.
+		hasImages := m.Role == talk.RoleUser && len(m.Images) > 0
+		if hasImages {
+			for _, img := range m.Images {
+				blocks = append(blocks, contentBlock{
+					Type:   "image",
+					Source: &imageSource{Type: "base64", MediaType: img.MediaType, Data: img.Data},
+				})
+			}
 		}
 		// Anthropic rejects an empty text block; skip it when images carry the
 		// message. A textless, imageless message keeps its (empty) text block so
 		// existing behaviour is unchanged.
-		if m.Content != "" || len(m.Images) == 0 {
+		if m.Content != "" || !hasImages {
 			blocks = append(blocks, contentBlock{
 				Type: "text",
 				Text: m.Content,

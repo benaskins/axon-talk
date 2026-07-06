@@ -60,3 +60,15 @@ func TestToMessages_TextMessageUnchanged(t *testing.T) {
 		t.Fatalf("text-only message changed: %+v", out[0].Content)
 	}
 }
+
+func TestToMessages_AssistantImagesIgnored(t *testing.T) {
+	msgs := []talk.Message{{
+		Role:    talk.RoleAssistant,
+		Content: "here is the result",
+		Images:  []talk.ImageContent{{MediaType: "image/jpeg", Data: "QUJD"}},
+	}}
+	out, _ := toMessages(msgs)
+	if len(out[0].Content) != 1 || out[0].Content[0].Type != "text" {
+		t.Fatalf("assistant image block should be dropped, got %+v", out[0].Content)
+	}
+}
