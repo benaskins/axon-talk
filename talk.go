@@ -21,9 +21,18 @@ const (
 type Message struct {
 	Role       Role
 	Content    string
+	Images     []ImageContent // Inline images for a vision request; only meaningful on a user message.
 	Thinking   string
 	ToolCalls  []ToolCall
 	ToolCallID string // Correlates a tool result with its originating ToolCall.
+}
+
+// ImageContent is an image attached to a user message for vision models.
+// Data is the raw image bytes, base64-encoded; MediaType is the MIME type
+// (e.g. "image/jpeg"). Adapters that do not support images ignore these.
+type ImageContent struct {
+	MediaType string
+	Data      string
 }
 
 // ToolCall represents an LLM's decision to invoke a tool.
